@@ -1,0 +1,71 @@
+import express from "express";
+import dotenv from "dotenv";
+import cors from "cors";
+import connectDB from "./src/config/db.js";
+import authRoutes from "./src/routes/authRoutes.js";
+import propertyRoutes from "./src/routes/propertyRoutes.js";
+import passport from "passport";
+import "./src/config/passport.js";
+import cookieParser from "cookie-parser";
+
+dotenv.config({
+  path: "./.env",
+});
+const app = express();
+app.use(cors({ 
+  origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+  credentials: true, // IMPORTANT: Allow cookies
+}));
+app.use(cookieParser());
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+
+// // Simple health route for quick local debugging
+// app.get("/", (req, res) => {
+//   return res.status(200).json({ status: "ok", uptime: process.uptime() });
+// });
+app.use(passport.initialize());
+
+
+
+
+
+// Connect DB and passport
+
+connectDB()
+  .then(() => {
+
+    app.on("error",(err)=>{
+      console.log("ERRR:",err);
+      throw err
+    })
+    app.listen(process.env.PORT || 8000, () => {
+      console.log(`Server is running at port: ${process.env.PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.log("MONGO db connection failed!!!", err);
+  });
+
+// Routes
+app.use("/api/auth", authRoutes);
+app.use("/api/properties", propertyRoutes);
+
+ app.get("/test", (req, res) => {
+  res.json({
+    message: "Auth routes working!",
+    googleAuthUrl: "/api/auth/google",
+    env: {
+      hasClientId: !!process.env.GOOGLE_CLIENT_ID,
+      hasClientSecret: !!process.env.GOOGLE_CLIENT_SECRET,
+      callbackUrl: process.env.GOOGLE_CALLBACK_URL,
+      corsOrigin: process.env.CORS_ORIGIN,
+    }
+  });
+});
+ 
+
+
+
+
+
