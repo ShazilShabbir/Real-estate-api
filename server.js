@@ -13,22 +13,18 @@ dotenv.config({
 });
 const app = express();
 app.use(cors({ 
-  origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+  origin: process.env.CORS_ORIGIN,
   credentials: true, // IMPORTANT: Allow cookies
 }));
 app.use(cookieParser());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
-// // Simple health route for quick local debugging
+// Simple health route for quick local debugging
 // app.get("/", (req, res) => {
 //   return res.status(200).json({ status: "ok", uptime: process.uptime() });
 // });
 app.use(passport.initialize());
-
-
-
-
 
 // Connect DB and passport
 
@@ -51,18 +47,7 @@ connectDB()
 app.use("/api/auth", authRoutes);
 app.use("/api/properties", propertyRoutes);
 
- app.get("/test", (req, res) => {
-  res.json({
-    message: "Auth routes working!",
-    googleAuthUrl: "/api/auth/google",
-    env: {
-      hasClientId: !!process.env.GOOGLE_CLIENT_ID,
-      hasClientSecret: !!process.env.GOOGLE_CLIENT_SECRET,
-      callbackUrl: process.env.GOOGLE_CALLBACK_URL,
-      corsOrigin: process.env.CORS_ORIGIN,
-    }
-  });
-});
+
  
 
 

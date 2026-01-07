@@ -47,6 +47,7 @@ const propertySchema = new Schema(
 			coordinates: { type: [Number], index: "2dsphere" },
 		},
 		images: [imageSchema],
+		videos: [imageSchema],
 		amenities: [String],
 		postedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
 		isFeatured: { type: Boolean, default: false },

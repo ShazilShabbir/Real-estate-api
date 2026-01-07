@@ -46,22 +46,34 @@ const createProperty = asyncHandler(async (req, res) => {
     }
   }
 
-  // handle images (multer) - with multiple images files
-  
-  const imagesFiles = req.files?.images || req.files || [];
-  
+  // handle images and videos (multer)
+  // req.files can be an array (multiple single-field uploads) or an object when using upload.fields  
+  const allFiles = [];
+  if (Array.isArray(req.files)) {
+    allFiles.push(...req.files);
+  } else if (req.files && typeof req.files === "object") {
+    // object with arrays: { images: [...], videos: [...] }
+    Object.values(req.files).forEach((v) => {
+      if (Array.isArray(v)) allFiles.push(...v);
+    });
+  }
+
   const images = [];
-  if (Array.isArray(imagesFiles)) {
-    for (const file of imagesFiles) {
+  const videos = [];
+  for (const file of allFiles) {
+    if (!file || !file.path) continue;
+    try {
       const uploaded = await uploadOnCloudinary(file.path);
-      if (uploaded) images.push({ url: uploaded.secure_url || uploaded.url, public_id: uploaded.public_id });
-    }
-  } else if (typeof imagesFiles === "object" && Object.keys(imagesFiles).length) {
-    // when multer stores as object with arrays: { images: [file,...] }
-    const arr = imagesFiles.images || Object.values(imagesFiles).flat();
-    for (const file of arr) {
-      const uploaded = await uploadOnCloudinary(file.path);
-      if (uploaded) images.push({ url: uploaded.secure_url || uploaded.url, public_id: uploaded.public_id });
+      if (!uploaded) continue;
+      const item = { url: uploaded.secure_url || uploaded.url, public_id: uploaded.public_id };
+      if (file.fieldname === "videos" || (file.mimetype && file.mimetype.startsWith("video/"))) {
+        videos.push(item);
+      } else {
+        images.push(item);
+      }
+    } catch (err) {
+      // continue on upload error for individual files
+      console.error("Error uploading file:", err);
     }
   }
 
@@ -80,6 +92,7 @@ const createProperty = asyncHandler(async (req, res) => {
     address: parsedAddress,
     location,
     images,
+    videos,
     amenities: amenities ? (typeof amenities === "string" ? amenities.split(",").map((a) => a.trim()) : amenities) : [],
     postedBy: req.user?._id,
     isFeatured: isFeatured === "true" || isFeatured === true,
@@ -139,78 +152,7 @@ const getProperties = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, { properties, page, limit, total }, "Properties fetched"));
 });
 
-// Cursor-based pagination (efficient for deep paging)
-const getPropertiesCursor = asyncHandler(async (req, res) => {
-  const limit = Math.min(Math.max(parseInt(req.query.limit || "10", 10), 1), 100);
-  const cursor = req.query.cursor || null; // base64 encoded JSON { createdAt, _id }
 
-  const {
-    q,
-    minPrice,
-    maxPrice,
-    city,
-    state,
-    propertyType,
-    bedrooms,
-    bathrooms,
-    sort,
-  } = req.query;
-
-  const filter = {};
-  if (q) filter.$text = { $search: q };
-  if (minPrice || maxPrice) {
-    filter.price = {};
-    if (minPrice) filter.price.$gte = parseFloat(minPrice);
-    if (maxPrice) filter.price.$lte = parseFloat(maxPrice);
-  }
-  if (city) filter["address.city"] = city;
-  if (state) filter["address.state"] = state;
-  if (propertyType) filter.propertyType = propertyType;
-  if (bedrooms) filter.bedrooms = { $gte: parseInt(bedrooms, 10) };
-  if (bathrooms) filter.bathrooms = { $gte: parseInt(bathrooms, 10) };
-
-  // Cursor is expected to be base64(JSON.stringify({ createdAt: ISOString, _id: id }))
-  if (cursor) {
-    try {
-      const decoded = JSON.parse(Buffer.from(cursor, "base64").toString("utf8"));
-      if (decoded && decoded.createdAt && decoded._id) {
-        // fetch records strictly older than the cursor (createdAt desc, tie-break by _id)
-        filter.$or = [
-          { createdAt: { $lt: new Date(decoded.createdAt) } },
-          { createdAt: new Date(decoded.createdAt), _id: { $lt: mongoose.Types.ObjectId(decoded._id) } },
-        ];
-      }
-    } catch (err) {
-      // ignore invalid cursor and treat as first page
-    }
-  }
-
-  // For cursor pagination we use createdAt desc then _id desc ordering for stable results
-  const sortObj = { createdAt: -1, _id: -1 };
-
-  // fetch limit+1 to determine if there is a next page
-  const docs = await Property.find(filter)
-    .sort(sortObj)
-    .limit(limit + 1)
-    .populate("postedBy", "username email avatar")
-    .lean()
-    .exec();
-
-  let nextCursor = null;
-  let results = docs;
-  if (docs.length > limit) {
-    const last = docs[limit - 1];
-    // set next cursor to the item after the last returned
-    nextCursor = Buffer.from(
-      JSON.stringify({ createdAt: docs[limit - 1].createdAt, _id: docs[limit - 1]._id })
-    ).toString("base64");
-    results = docs.slice(0, limit);
-  }
-
-  return res.status(200).json(
-    new ApiResponse(200, { properties: results, limit, nextCursor }, "Properties fetched (cursor)")
-  );
-});
 
 // Get single property
 const getPropertyById = asyncHandler(async (req, res) => {
@@ -255,18 +197,31 @@ const updateProperty = asyncHandler(async (req, res) => {
   }
 
   // handle images - if req.files.images provided and replaceImages flag true, replace; otherwise append
-  const imagesFiles = req.files?.images || req.files || [];
+  // handle images and videos from multer uploads
+  const _allFiles = [];
+  if (Array.isArray(req.files)) {
+    _allFiles.push(...req.files);
+  } else if (req.files && typeof req.files === "object") {
+    Object.values(req.files).forEach((v) => {
+      if (Array.isArray(v)) _allFiles.push(...v);
+    });
+  }
+
   const newImages = [];
-  if (Array.isArray(imagesFiles) && imagesFiles.length) {
-    for (const file of imagesFiles) {
+  const newVideos = [];
+  for (const file of _allFiles) {
+    if (!file || !file.path) continue;
+    try {
       const uploaded = await uploadOnCloudinary(file.path);
-      if (uploaded) newImages.push({ url: uploaded.secure_url || uploaded.url, public_id: uploaded.public_id });
-    }
-  } else if (typeof imagesFiles === "object" && Object.keys(imagesFiles).length) {
-    const arr = imagesFiles.images || Object.values(imagesFiles).flat();
-    for (const file of arr) {
-      const uploaded = await uploadOnCloudinary(file.path);
-      if (uploaded) newImages.push({ url: uploaded.secure_url || uploaded.url, public_id: uploaded.public_id });
+      if (!uploaded) continue;
+      const item = { url: uploaded.secure_url || uploaded.url, public_id: uploaded.public_id };
+      if (file.fieldname === "videos" || (file.mimetype && file.mimetype.startsWith("video/"))) {
+        newVideos.push(item);
+      } else {
+        newImages.push(item);
+      }
+    } catch (err) {
+      // ignore individual upload errors
     }
   }
 
@@ -275,6 +230,14 @@ const updateProperty = asyncHandler(async (req, res) => {
       updates.images = newImages;
     } else {
       updates.images = [...(property.images || []), ...newImages];
+    }
+  }
+
+  if (newVideos.length) {
+    if (req.body.replaceVideos === "true" || req.body.replaceVideos === true) {
+      updates.videos = newVideos;
+    } else {
+      updates.videos = [...(property.videos || []), ...newVideos];
     }
   }
 

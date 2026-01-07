@@ -32,7 +32,7 @@ router.route(
 router.route(
   "/google/callback").get(
   passport.authenticate("google", {  
-    failureRedirect: `${process.env.CORS_ORIGIN || "http://localhost:3000"}/login?error=auth_failed`,
+    failureRedirect: `${process.env.CORS_ORIGIN || "http://localhost:8000"}/login?error=auth_failed`,
       session: false,
    }),
   oauthCallbackHandler

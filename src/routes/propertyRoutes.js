@@ -1,7 +1,5 @@
-import express from "express";
-import fs from "fs";
-import path from "path";
-import multer from "multer";
+import { Router } from "express";
+import { upload } from "../middleware/multerMiddleware.js";
 import {
   createProperty,
   getProperties,
@@ -14,18 +12,17 @@ import {
 } from "../controllers/propertyController.js";
 import authMiddleware from "../middleware/authMiddleware.js";
 
-const router = express.Router();
+const router = Router();
 
-// ensure temp upload folder exists (uses existing public/temp directory)
-const tempDir = path.join(process.cwd(), "public", "temp");
-if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+// // ensure temp upload folder exists (uses existing public/temp directory)
+// const tempDir = path.join(process.cwd(), "public", "temp");
+// if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
-// use disk storage so files have a `path` for Cloudinary upload helper
-const upload = multer({ dest: tempDir });
+// // use disk storage so files have a `path` for Cloudinary upload helper
+// const upload = multer({ dest: tempDir });
 
 // Public
 router.get("/", getProperties);
-router.get("/cursor", getPropertiesCursor);
 router.get("/nearby", getNearbyProperties);
 router.get("/:id", getPropertyById);
 
@@ -33,13 +30,13 @@ router.get("/:id", getPropertyById);
 router.post(
   "/create",
   authMiddleware,
-  upload.fields([{ name: "images", maxCount: 10 }]),
+  upload.fields([{ name: "images", maxCount: 5 },{ name: "videos", maxCount: 2 }]),
   createProperty
 );
 router.put(
   "/:id",
   authMiddleware,
-  upload.fields([{ name: "images", maxCount: 10 }]),
+  upload.fields([{ name: "images", maxCount: 5 },{ name: "videos", maxCount: 2 }]),
   updateProperty
 );
 router.delete("/:id", authMiddleware, deleteProperty);

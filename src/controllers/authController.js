@@ -321,6 +321,13 @@ const oauthCallbackHandler = asyncHandler(async (req, res, next) => {
     const user = req.user;
     console.log("OAuth user:", user);
     
+// check if user already exists
+    const existingUser = await User.findById(user._id);
+    if (existingUser) {
+      // FIXED: Proper error handling
+      return res.json({message: "User is already registered"}).redirect(`${process.env.CORS_ORIGIN}/login?error=oauth_failed`);
+    }
+
     if (!user) {
       // FIXED: Proper error handling
       return res.redirect(`${process.env.CORS_ORIGIN}/login?error=oauth_failed`);
@@ -337,10 +344,7 @@ const oauthCallbackHandler = asyncHandler(async (req, res, next) => {
 
     // Set cookies
     res.cookie("accessToken", accessToken, cookieOptions);
-    res.cookie("refreshToken", refreshToken, {
-      ...cookieOptions,
-      maxAge: 10 * 24 * 60 * 60 * 1000, // 10 days
-    });
+    res.cookie("refreshToken", refreshToken, cookieOptions);
 
     // FIXED: Use CLIENT_REDIRECT_URL or CORS_ORIGIN
     const redirectUrl = process.env.CLIENT_REDIRECT_URL || process.env.CORS_ORIGIN || "http://localhost:3000";

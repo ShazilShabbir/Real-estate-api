@@ -58,11 +58,11 @@ passport.use(
     },
     async (accessToken, refreshToken, profile, done) => {
       try {
-        console.log("📥 Facebook Profile Received:", {
-          id: profile.id,
-          email: profile.emails?.[0]?.value,
-          name: profile.displayName,
-        });
+        // console.log("📥 Facebook Profile Received:", {
+        //   id: profile.id,
+        //   email: profile.emails?.[0]?.value,
+        //   name: profile.displayName,
+        // });
 
         let user = await User.findOne({ facebookId: profile.id });
 
