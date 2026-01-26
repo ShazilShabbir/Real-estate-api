@@ -3,7 +3,6 @@ import { upload } from "../middleware/multerMiddleware.js";
 import {
   createProperty,
   getProperties,
-  getPropertiesCursor,
   getPropertyById,
   updateProperty,
   deleteProperty,

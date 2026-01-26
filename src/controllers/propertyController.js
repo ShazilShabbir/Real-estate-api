@@ -304,8 +304,7 @@ const toggleLike = asyncHandler(async (req, res) => {
 export {
   createProperty,
   getProperties,
-  // cursor based pagination
-  getPropertiesCursor,
+  // cursor based pagination,
   getPropertyById,
   updateProperty,
   deleteProperty,

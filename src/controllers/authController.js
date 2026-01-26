@@ -1,7 +1,7 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
-import User from "../models/User.js";   
-import {uploadOnCloudinary} from "../utils/cloudinary.js";
+import User from "../models/User.js";
+import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import Jwt from "jsonwebtoken";
 
@@ -18,7 +18,7 @@ const generateAccessAndRefereshTokens = async (userId) => {
   } catch (error) {
     throw new ApiError(
       500,
-      "Something went wrong while generating referesh and access token"
+      "Something went wrong while generating referesh and access token",
     );
   }
 };
@@ -33,8 +33,8 @@ const registerUser = asyncHandler(async (req, res) => {
   // remove password and refresh token field from response
   // check for user creation
   //return response
-// console.log("REQ FILE:", req.file);
-// console.log("REQ BODY:", req.body);
+  // console.log("REQ FILE:", req.file);
+  // console.log("REQ BODY:", req.body);
   //get user details from frontend
   const { username, email, phone, password } = req.body || {};
   //console.log("email:", email);
@@ -46,7 +46,7 @@ const registerUser = asyncHandler(async (req, res) => {
   if (!email.includes("@")) {
     throw new ApiError(
       400,
-      "Invalid email format. Email must contain '@' symbol"
+      "Invalid email format. Email must contain '@' symbol",
     );
   }
 
@@ -63,14 +63,12 @@ const registerUser = asyncHandler(async (req, res) => {
   if (!avatarLocalPath) {
     throw new ApiError(400, "Avatar file is required");
   }
-  console.log("avatar ",avatarLocalPath);
-  
-  // upload them to cloudinary, avatar 
+
+  // upload them to cloudinary, avatar
   const avatar = await uploadOnCloudinary(avatarLocalPath);
 
-
   // again check for avatar upload to cloudinary
- if (!avatar || !avatar.secure_url) {
+  if (!avatar || !avatar.secure_url) {
     throw new ApiError(400, "Avatar upload failed");
   }
 
@@ -86,7 +84,7 @@ const registerUser = asyncHandler(async (req, res) => {
   // check for user creation
   // remove password and refresh token field from response
   const createdUser = await User.findById(user._id).select(
-    "-password -refreshToken"
+    "-password -refreshToken",
   );
 
   if (!createdUser) {
@@ -107,20 +105,16 @@ const loginUser = asyncHandler(async (req, res) => {
   //send cookie
 
   const { email, username, password } = req.body;
-  console.log(email);
-
   if (!username && !email) {
     throw new ApiError(400, "username or email is required");
   }
-
   // Here is an alternative of above code based on logic discussed in video:
   // if (!(username || email)) {
   //     throw new ApiError(400, "username or email is required")
 
   // }
-
   const user = await User.findOne({ $or: [{ username }, { email }] }).select(
-    "+password +refreshToken"
+    "+password +refreshToken",
   );
 
   if (!user) {
@@ -134,16 +128,18 @@ const loginUser = asyncHandler(async (req, res) => {
   }
 
   const { accessToken, refreshToken } = await generateAccessAndRefereshTokens(
-    user._id
+    user._id,
   );
 
   const loggedInUser = await User.findById(user._id).select(
-    "-password -refreshToken"
+    "-password -refreshToken",
   );
 
   const options = {
     httpOnly: true,
-    secure: false,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   };
 
   return res
@@ -158,8 +154,8 @@ const loginUser = asyncHandler(async (req, res) => {
           accessToken,
           refreshToken,
         },
-        "User logged In Successfully"
-      )
+        "User logged In Successfully",
+      ),
     );
 });
 
@@ -173,12 +169,14 @@ const logoutUser = asyncHandler(async (req, res) => {
     },
     {
       new: true,
-    }
+    },
   );
 
   const options = {
     httpOnly: true,
-    secure: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   };
 
   return res
@@ -199,7 +197,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
   try {
     const decodedToken = Jwt.verify(
       incomingRefreshToken,
-      process.env.REFRESH_TOKEN_SECRET
+      process.env.REFRESH_TOKEN_SECRET,
     );
     const user = await User.findById(decodedToken?._id);
 
@@ -213,7 +211,9 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
 
     const options = {
       httpOnly: true,
-      secure: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     };
 
     const { accessToken, refreshToken: newRefreshToken } =
@@ -227,8 +227,8 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
         new ApiResponse(
           200,
           { accessToken, refreshToken: newRefreshToken },
-          "Acess token refreshed"
-        )
+          "Acess token refreshed",
+        ),
       );
   } catch (error) {
     throw new ApiError(401, error?.message || "Invalid refresh token");
@@ -237,10 +237,10 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
 
 const changeCurrentPassword = asyncHandler(async (req, res) => {
   try {
-  const { oldPassword, newPassword } = req.body;
-  const user = await User.findById(req.user?._id).select("+password");
+    const { oldPassword, newPassword } = req.body;
+    const user = await User.findById(req.user?._id).select("+password");
 
-  const isPasswordCorrect = await user.isPasswordCorrect(oldPassword);
+    const isPasswordCorrect = await user.isPasswordCorrect(oldPassword);
 
     if (!isPasswordCorrect) {
       throw new ApiError(400, "Invalid old password");
@@ -256,7 +256,6 @@ const changeCurrentPassword = asyncHandler(async (req, res) => {
 });
 
 const getCurrentUser = asyncHandler(async (req, res) => {
-  console.log(req.user)
   res
     .status(200)
     .json(new ApiResponse(200, req.user, "Current user fetched successfully"));
@@ -276,26 +275,27 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
         phone,
       },
     },
-    { new: true }
+    { new: true },
   ).select("-password");
 
-  return res.status(200).json(new ApiResponse(200, user, "Account details updated successfully"));
+  return res
+    .status(200)
+    .json(new ApiResponse(200, user, "Account details updated successfully"));
 });
 
 const updateUserAvatar = asyncHandler(async (req, res) => {
-try {
+  try {
     const avatarLocalPath = req.file?.path;
     if (!avatarLocalPath) {
       throw new ApiError(400, "Avatar file is missing");
     }
 
+    const avatar = await uploadOnCloudinary(avatarLocalPath);
 
-   const avatar = await uploadOnCloudinary(avatarLocalPath);
-    
     if (!avatar.url) {
       throw new ApiError(400, "Error while uploading on avatar");
     }
-  
+
     const updatedAvatar = await User.findByIdAndUpdate(
       req.user?._id,
       {
@@ -303,37 +303,44 @@ try {
           avatar: avatar.url,
         },
       },
-      { new: true }
+      { new: true },
     ).select("-password");
-  
+
     res
       .status(200)
       .json(new ApiResponse(200, updatedAvatar, "Avatar Updated successfully"));
-} catch (error) {
-    throw new ApiError(500, error?.message || "Something went wrong while updating avatar");
-}
+  } catch (error) {
+    throw new ApiError(
+      500,
+      error?.message || "Something went wrong while updating avatar",
+    );
+  }
 });
-
 
 // OAuth callback handler used by passport routes
 const oauthCallbackHandler = asyncHandler(async (req, res, next) => {
   try {
     const user = req.user;
-    console.log("OAuth user:", user);
-    
-// check if user already exists
+
+    // check if user already exists
     const existingUser = await User.findById(user._id);
     if (existingUser) {
       // FIXED: Proper error handling
-      return res.json({message: "User is already registered"}).redirect(`${process.env.CORS_ORIGIN}/login?error=oauth_failed`);
+      return res
+        .json({ message: "User is already registered" })
+        .redirect(`${process.env.CORS_ORIGIN}/login?error=oauth_failed`);
     }
 
     if (!user) {
       // FIXED: Proper error handling
-      return res.redirect(`${process.env.CORS_ORIGIN}/login?error=oauth_failed`);
+      return res.redirect(
+        `${process.env.CORS_ORIGIN}/login?error=oauth_failed`,
+      );
     }
 
-    const { accessToken, refreshToken } = await generateAccessAndRefereshTokens(user._id);
+    const { accessToken, refreshToken } = await generateAccessAndRefereshTokens(
+      user._id,
+    );
 
     const cookieOptions = {
       httpOnly: true,
@@ -347,18 +354,19 @@ const oauthCallbackHandler = asyncHandler(async (req, res, next) => {
     res.cookie("refreshToken", refreshToken, cookieOptions);
 
     // FIXED: Use CLIENT_REDIRECT_URL or CORS_ORIGIN
-    const redirectUrl = process.env.CLIENT_REDIRECT_URL || process.env.CORS_ORIGIN || "http://localhost:3000";
-    
+    const redirectUrl =
+      process.env.CLIENT_REDIRECT_URL ||
+      process.env.CORS_ORIGIN ||
+      "http://localhost:3000";
+
     // Redirect to frontend
     return res.redirect(`${redirectUrl}/auth/success`);
   } catch (err) {
-    console.error("OAuth callback error:", err);
-    return res.redirect(`${process.env.CORS_ORIGIN}/login?error=token_generation_failed`);
+    return res.redirect(
+      `${process.env.CORS_ORIGIN}/login?error=token_generation_failed`,
+    );
   }
 });
-
-
-
 
 export {
   registerUser,
@@ -372,5 +380,3 @@ export {
   // oauth callback handler for passport
   oauthCallbackHandler,
 };
-
-
