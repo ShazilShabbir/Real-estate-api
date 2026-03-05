@@ -28,20 +28,16 @@ app.use(passport.initialize());
 
 // Connect DB and passport
 
-connectDB()
-  .then(() => {
+connectDB().catch((err) => {
+  console.error("MONGO db connection failed:", err);
+});
 
-    app.on("error",(err)=>{
-      console.log("ERRR:",err);
-      throw err
-    })
-    app.listen(process.env.PORT || 8000, () => {
-      console.log(`Server is running at port: ${process.env.PORT}`);
-    });
-  })
-  .catch((err) => {
-    console.log("MONGO db connection failed!!!", err);
+if (process.env.NODE_ENV !== "production") {
+  const port = process.env.PORT || 8000;
+  app.listen(port, () => {
+    console.log(`Server running on ${port}`);
   });
+}
 
 // Routes
 app.use("/api/auth", authRoutes);
