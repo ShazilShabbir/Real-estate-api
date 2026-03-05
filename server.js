@@ -20,10 +20,10 @@ app.use(cookieParser());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
-// Simple health route for quick local debugging
-// app.get("/", (req, res) => {
-//   return res.status(200).json({ status: "ok", uptime: process.uptime() });
-// });
+// Health route for local + Vercel checks
+app.get("/", (req, res) => {
+  return res.status(200).json({ status: "ok", service: "backend" });
+});
 app.use(passport.initialize());
 
 // Connect DB and passport
@@ -43,6 +43,7 @@ if (process.env.NODE_ENV !== "production") {
 app.use("/api/auth", authRoutes);
 app.use("/api/properties", propertyRoutes);
 
+export default app;
 
  
 
