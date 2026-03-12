@@ -181,6 +181,8 @@ const updateProperty = asyncHandler(async (req, res) => {
   }
 
   const updates = { ...req.body };
+  console.log("[updateProperty] Raw body:", JSON.stringify(updates, null, 2));
+  console.log("[updateProperty] Files received:", req.files ? Object.keys(req.files) : "none");
 
   // if address provided as JSON string in multipart/form-data, parse it
   if (updates.address && typeof updates.address === "string") {
@@ -260,8 +262,21 @@ const updateProperty = asyncHandler(async (req, res) => {
 
   const filteredUpdates = {};
   allowedKeys.forEach((key) => {
-    if (updates[key] !== undefined) {
-      filteredUpdates[key] = updates[key];
+    if (updates[key] !== undefined && updates[key] !== "") {
+      let value = updates[key];
+      
+      // Explicitly parse fields if they come as strings from FormData
+      if (key === "price" || key === "area") {
+        value = parseFloat(value);
+      } else if (key === "bedrooms" || key === "bathrooms") {
+        value = parseInt(value, 10);
+      } else if (key === "isFeatured") {
+        value = value === "true" || value === true;
+      } else if (key === "amenities" && typeof value === "string") {
+        value = value.split(",").map(a => a.trim()).filter(Boolean);
+      }
+      
+      filteredUpdates[key] = value;
     }
   });
 

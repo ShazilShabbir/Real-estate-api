@@ -54,6 +54,7 @@ app.use((err, req, res, next) => {
     statusCode = 400;
     message = "Validation Error";
     errors = Object.values(err.errors).map(val => val.message);
+    console.log("[Mongoose Validation Error]:", JSON.stringify(err.errors, null, 2));
   }
 
   // Handle Mongoose Cast Errors (Invalid ID)
@@ -63,7 +64,9 @@ app.use((err, req, res, next) => {
   }
 
   console.error(`[Error] ${statusCode} - ${message}`);
-  if (err.stack && process.env.NODE_ENV !== 'production') console.error(err.stack);
+  if (err.stack && process.env.NODE_ENV !== 'production') {
+    // console.error(err.stack); // Reduced noise
+  }
 
   res.status(statusCode).json({
     success: false,
