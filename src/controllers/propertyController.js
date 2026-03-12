@@ -195,7 +195,11 @@ const updateProperty = asyncHandler(async (req, res) => {
 
   // handle location if provided
   if (updates.lat && updates.lng) {
-    updates.location = { type: "Point", coordinates: [parseFloat(updates.lng), parseFloat(updates.lat)] };
+    const lng = parseFloat(updates.lng);
+    const lat = parseFloat(updates.lat);
+    if (!isNaN(lng) && !isNaN(lat)) {
+      updates.location = { type: "Point", coordinates: [lng, lat] };
+    }
   }
 
   // handle images - if req.files.images provided and replaceImages flag true, replace; otherwise append
@@ -215,7 +219,10 @@ const updateProperty = asyncHandler(async (req, res) => {
     if (!file || !file.path) continue;
     try {
       const uploaded = await uploadOnCloudinary(file.path);
-      if (!uploaded) continue;
+      if (!uploaded || (!uploaded.secure_url && !uploaded.url)) {
+        console.log("[updateProperty] Upload failed or URL missing for file:", file.fieldname);
+        continue;
+      }
       const item = { url: uploaded.secure_url || uploaded.url, public_id: uploaded.public_id };
       if (file.fieldname === "videos" || (file.mimetype && file.mimetype.startsWith("video/"))) {
         newVideos.push(item);
@@ -280,11 +287,26 @@ const updateProperty = asyncHandler(async (req, res) => {
     }
   });
 
-  if (updates.images) filteredUpdates.images = updates.images;
-  if (updates.videos) filteredUpdates.videos = updates.videos;
+  if (Array.isArray(updates.images) && updates.images.length > 0) {
+    filteredUpdates.images = updates.images;
+  }
+  if (Array.isArray(updates.videos) && updates.videos.length > 0) {
+    filteredUpdates.videos = updates.videos;
+  }
 
+  console.log("[updateProperty] Final filteredUpdates:", JSON.stringify(filteredUpdates, null, 2));
   property.set(filteredUpdates);
-  await property.save();
+  
+  try {
+    await property.save();
+  } catch (err) {
+    if (err.name === 'ValidationError') {
+      console.log("[updateProperty] Validation failed details:", JSON.stringify(err.errors, null, 2));
+    } else {
+      console.error("[updateProperty] Save error:", err);
+    }
+    throw err; // Re-throw to be caught by asyncHandler and handled in server.js
+  }
 
   return res.status(200).json(new ApiResponse(200, property, "Property updated"));
 });
