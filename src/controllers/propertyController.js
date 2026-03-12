@@ -286,28 +286,33 @@ const updateProperty = asyncHandler(async (req, res) => {
 
   const filteredUpdates = {};
   allowedKeys.forEach((key) => {
-    if (updates[key] !== undefined) {
-      let value = updates[key];
-      
-      // Explicitly parse fields if they come as strings from FormData
-      if (key === "price" || key === "area") {
-        const num = parseFloat(value);
-        if (!isNaN(num)) value = num;
-      } else if (key === "bedrooms" || key === "bathrooms") {
-        const num = parseInt(value, 10);
-        if (!isNaN(num)) value = num;
-      } else if (key === "isFeatured") {
-        value = value === "true" || value === true;
-      } else if (key === "amenities") {
-        if (typeof value === "string") {
-          value = value.split(",").map(a => a.trim()).filter(Boolean);
-        } else if (!Array.isArray(value)) {
-          value = [];
-        }
-      }
-      
-      filteredUpdates[key] = value;
+    let value = updates[key];
+    
+    // Skip undefined or empty strings for most fields (especially numeric ones)
+    if (value === undefined || value === null || (typeof value === "string" && value.trim() === "")) {
+      return;
     }
+
+    // Explicitly parse fields if they come as strings from FormData
+    if (key === "price" || key === "area") {
+      const num = parseFloat(value);
+      if (isNaN(num)) return; // Skip if it's not a valid number
+      value = num;
+    } else if (key === "bedrooms" || key === "bathrooms") {
+      const num = parseInt(value, 10);
+      if (isNaN(num)) return; // Skip if it's not a valid number
+      value = num;
+    } else if (key === "isFeatured") {
+      value = value === "true" || value === true;
+    } else if (key === "amenities") {
+      if (typeof value === "string") {
+        value = value.split(",").map(a => a.trim()).filter(Boolean);
+      } else if (!Array.isArray(value)) {
+        value = [];
+      }
+    }
+    
+    filteredUpdates[key] = value;
   });
 
   // Include images and videos in filteredUpdates for Mongoose detection
