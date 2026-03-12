@@ -52,7 +52,6 @@ const createProperty = asyncHandler(async (req, res) => {
   if (Array.isArray(req.files)) {
     allFiles.push(...req.files);
   } else if (req.files && typeof req.files === "object") {
-    // object with arrays: { images: [...], videos: [...] }
     Object.values(req.files).forEach((v) => {
       if (Array.isArray(v)) allFiles.push(...v);
     });
@@ -63,26 +62,31 @@ const createProperty = asyncHandler(async (req, res) => {
   for (const file of allFiles) {
     if (!file || !file.path) continue;
     try {
-      const uploaded = await uploadOnCloudinary(file.path);
-      if (!uploaded) continue;
+      const resourceType = (file.fieldname === "videos" || (file.mimetype && file.mimetype.startsWith("video/"))) ? "video" : "image";
+      console.log(`[createProperty] Uploading ${resourceType} to Cloudinary:`, file.originalname);
+      
+      const uploaded = await uploadOnCloudinary(file.path, resourceType);
+      if (!uploaded || (!uploaded.secure_url && !uploaded.url)) continue;
+      
       const item = { url: uploaded.secure_url || uploaded.url, public_id: uploaded.public_id };
-      if (file.fieldname === "videos" || (file.mimetype && file.mimetype.startsWith("video/"))) {
+      if (resourceType === "video") {
         videos.push(item);
       } else {
         images.push(item);
       }
     } catch (err) {
-      // continue on upload error for individual files
-      console.error("Error uploading file:", err);
+      console.error("[createProperty] Error uploading file:", file.originalname, err);
     }
   }
 
-  const location = lat && lng ? { type: "Point", coordinates: [parseFloat(lng), parseFloat(lat)] } : undefined;
+  const parsedLng = parseFloat(lng);
+  const parsedLat = parseFloat(lat);
+  const location = !isNaN(parsedLng) && !isNaN(parsedLat) ? { type: "Point", coordinates: [parsedLng, parsedLat] } : undefined;
 
   const doc = {
     title,
     description,
-    price: parseFloat(price),
+    price: parseFloat(price) || 0,
     currency: currency || "USD",
     bedrooms: bedrooms ? parseInt(bedrooms, 10) : 0,
     bathrooms: bathrooms ? parseInt(bathrooms, 10) : 0,
@@ -93,7 +97,7 @@ const createProperty = asyncHandler(async (req, res) => {
     location,
     images,
     videos,
-    amenities: amenities ? (typeof amenities === "string" ? amenities.split(",").map((a) => a.trim()) : amenities) : [],
+    amenities: amenities ? (typeof amenities === "string" ? amenities.split(",").map((a) => a.trim()).filter(Boolean) : amenities) : [],
     postedBy: req.user?._id,
     isFeatured: isFeatured === "true" || isFeatured === true,
   };
@@ -218,23 +222,30 @@ const updateProperty = asyncHandler(async (req, res) => {
   for (const file of _allFiles) {
     if (!file || !file.path) continue;
     try {
-      const uploaded = await uploadOnCloudinary(file.path);
+      const resourceType = (file.fieldname === "videos" || (file.mimetype && file.mimetype.startsWith("video/"))) ? "video" : "image";
+      console.log(`[updateProperty] Uploading ${resourceType} to Cloudinary:`, file.originalname);
+      
+      const uploaded = await uploadOnCloudinary(file.path, resourceType);
       if (!uploaded || (!uploaded.secure_url && !uploaded.url)) {
-        console.log("[updateProperty] Upload failed or URL missing for file:", file.fieldname);
+        console.log("[updateProperty] Upload failed or URL missing for file:", file.fieldname, file.originalname);
         continue;
       }
+      
+      console.log("[updateProperty] Upload successful:", uploaded.secure_url || uploaded.url);
       const item = { url: uploaded.secure_url || uploaded.url, public_id: uploaded.public_id };
-      if (file.fieldname === "videos" || (file.mimetype && file.mimetype.startsWith("video/"))) {
+      
+      if (resourceType === "video") {
         newVideos.push(item);
       } else {
         newImages.push(item);
       }
     } catch (err) {
-      // ignore individual upload errors
+      console.error("[updateProperty] Upload error for file:", file.originalname, err);
     }
   }
 
-  if (newImages.length) {
+  // Handle Image Merging/Replacement
+  if (newImages.length > 0) {
     if (req.body.replaceImages === "true" || req.body.replaceImages === true) {
       updates.images = newImages;
     } else {
@@ -242,7 +253,8 @@ const updateProperty = asyncHandler(async (req, res) => {
     }
   }
 
-  if (newVideos.length) {
+  // Handle Video Merging/Replacement
+  if (newVideos.length > 0) {
     if (req.body.replaceVideos === "true" || req.body.replaceVideos === true) {
       updates.videos = newVideos;
     } else {
@@ -274,9 +286,11 @@ const updateProperty = asyncHandler(async (req, res) => {
       
       // Explicitly parse fields if they come as strings from FormData
       if (key === "price" || key === "area") {
-        value = parseFloat(value);
+        const num = parseFloat(value);
+        if (!isNaN(num)) value = num;
       } else if (key === "bedrooms" || key === "bathrooms") {
-        value = parseInt(value, 10);
+        const num = parseInt(value, 10);
+        if (!isNaN(num)) value = num;
       } else if (key === "isFeatured") {
         value = value === "true" || value === true;
       } else if (key === "amenities" && typeof value === "string") {
@@ -287,6 +301,7 @@ const updateProperty = asyncHandler(async (req, res) => {
     }
   });
 
+  // Handle images and videos only if they were successfully uploaded and processed
   if (Array.isArray(updates.images) && updates.images.length > 0) {
     filteredUpdates.images = updates.images;
   }
@@ -294,18 +309,21 @@ const updateProperty = asyncHandler(async (req, res) => {
     filteredUpdates.videos = updates.videos;
   }
 
-  console.log("[updateProperty] Final filteredUpdates:", JSON.stringify(filteredUpdates, null, 2));
+  console.log("[updateProperty] Final filteredUpdates keys:", Object.keys(filteredUpdates));
+  
+  // Apply updates
   property.set(filteredUpdates);
   
   try {
     await property.save();
+    console.log("[updateProperty] Save successful");
   } catch (err) {
     if (err.name === 'ValidationError') {
       console.log("[updateProperty] Validation failed details:", JSON.stringify(err.errors, null, 2));
     } else {
       console.error("[updateProperty] Save error:", err);
     }
-    throw err; // Re-throw to be caught by asyncHandler and handled in server.js
+    throw err;
   }
 
   return res.status(200).json(new ApiResponse(200, property, "Property updated"));

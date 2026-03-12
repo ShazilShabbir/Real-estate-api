@@ -9,16 +9,17 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-const uploadOnCloudinary = async (localFilePath)=>{
+const uploadOnCloudinary = async (localFilePath, resourceType = "auto") => {
     try {
         if (!localFilePath) return null
         //upload the file on cloudinary
+      console.log(`[Cloudinary] Uploading ${resourceType} file:`, localFilePath);
       const response = await cloudinary.uploader.upload(localFilePath,{
         folder: "real-estate/avatars",
-        resource_type: "auto"
+        resource_type: resourceType
         })
         //file has been uploaded successfully
-        // console.log('file is uploaded on cloudinary',response.url);
+        console.log('[Cloudinary] Upload success:', response.secure_url || response.url);
 
      if (fs.existsSync(localFilePath)) {
       fs.unlinkSync(localFilePath);
