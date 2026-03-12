@@ -16,6 +16,7 @@ const addressSchema = new Schema(
 		city: { type: String },
 		state: { type: String },
 		zipcode: { type: String },
+		postalCode: { type: String },
 		country: { type: String, default: "USA" },
 	},
 	{ _id: false }
@@ -32,10 +33,10 @@ const propertySchema = new Schema(
 		area: { type: Number, default: 0 }, // area in sqft (or sqm based on currency/locale)
 		propertyType: {
 			type: String,
-			enum: ["house", "apartment", "condo", "land", "townhouse", "commercial", "other"],
+			enum: ["house", "apartment", "villa", "condo", "land", "townhouse", "commercial", "other"],
 			default: "house",
 		},
-		status: { type: String, enum: ["available", "sold", "pending"], default: "available" },
+		status: { type: String, enum: ["available", "sold", "pending", "rented"], default: "available" },
 		address: addressSchema,
 		// GeoJSON point: [lng, lat]
 		location: {
@@ -67,7 +68,7 @@ propertySchema.index({ title: "text", description: "text", "address.city": "text
 // Virtual for full address
 propertySchema.virtual("fullAddress").get(function () {
 	const a = this.address || {};
-	return [a.street, a.city, a.state, a.zipcode, a.country].filter(Boolean).join(", ");
+	return [a.street, a.city, a.state, a.zipcode, a.postalCode, a.country].filter(Boolean).join(", ");
 });
 propertySchema.plugin(mongoosePaginate);
 export default mongoose.models.Property || mongoose.model("Property", propertySchema);

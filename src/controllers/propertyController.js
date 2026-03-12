@@ -241,7 +241,34 @@ const updateProperty = asyncHandler(async (req, res) => {
     }
   }
 
-  Object.keys(updates).forEach((k) => (property[k] = updates[k]));
+  // safer update: avoid overwriting sensitive fields and use mongoose .set()
+  const allowedKeys = [
+    "title",
+    "description",
+    "price",
+    "currency",
+    "bedrooms",
+    "bathrooms",
+    "area",
+    "propertyType",
+    "status",
+    "address",
+    "amenities",
+    "isFeatured",
+    "location"
+  ];
+
+  const filteredUpdates = {};
+  allowedKeys.forEach((key) => {
+    if (updates[key] !== undefined) {
+      filteredUpdates[key] = updates[key];
+    }
+  });
+
+  if (updates.images) filteredUpdates.images = updates.images;
+  if (updates.videos) filteredUpdates.videos = updates.videos;
+
+  property.set(filteredUpdates);
   await property.save();
 
   return res.status(200).json(new ApiResponse(200, property, "Property updated"));
@@ -258,7 +285,7 @@ const deleteProperty = asyncHandler(async (req, res) => {
     throw new ApiError(403, "Forbidden");
   }
 
-  await property.remove();
+  await property.deleteOne();
   return res.status(200).json(new ApiResponse(200, {}, "Property deleted"));
 });
 
