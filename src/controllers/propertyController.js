@@ -251,6 +251,7 @@ const updateProperty = asyncHandler(async (req, res) => {
     } else {
       updates.images = [...(property.images || []), ...newImages];
     }
+    console.log("[updateProperty] Images prepared, count:", updates.images.length);
   }
 
   // Handle Video Merging/Replacement
@@ -260,6 +261,7 @@ const updateProperty = asyncHandler(async (req, res) => {
     } else {
       updates.videos = [...(property.videos || []), ...newVideos];
     }
+    console.log("[updateProperty] Videos prepared, count:", updates.videos.length);
   } else if ((req.body.replaceVideos === "true" || req.body.replaceVideos === true) && (req.files?.videos?.length > 0 || req.files?.length > 0)) {
     // If files were sent but none uploaded successfully
     throw new ApiError(500, "Failed to upload video files to Cloudinary");
@@ -284,7 +286,7 @@ const updateProperty = asyncHandler(async (req, res) => {
 
   const filteredUpdates = {};
   allowedKeys.forEach((key) => {
-    if (updates[key] !== undefined && updates[key] !== "") {
+    if (updates[key] !== undefined) {
       let value = updates[key];
       
       // Explicitly parse fields if they come as strings from FormData
@@ -296,34 +298,37 @@ const updateProperty = asyncHandler(async (req, res) => {
         if (!isNaN(num)) value = num;
       } else if (key === "isFeatured") {
         value = value === "true" || value === true;
-      } else if (key === "amenities" && typeof value === "string") {
-        value = value.split(",").map(a => a.trim()).filter(Boolean);
+      } else if (key === "amenities") {
+        if (typeof value === "string") {
+          value = value.split(",").map(a => a.trim()).filter(Boolean);
+        } else if (!Array.isArray(value)) {
+          value = [];
+        }
       }
       
       filteredUpdates[key] = value;
     }
   });
 
-  // Handle images and videos only if they were successfully uploaded and processed
-  if (Array.isArray(updates.images)) {
-    property.images = updates.images;
-    console.log("[updateProperty] Set property.images, count:", property.images.length);
-  }
-  if (Array.isArray(updates.videos)) {
-    property.videos = updates.videos;
-    console.log("[updateProperty] Set property.videos, count:", property.videos.length);
-  }
+  // Include images and videos in filteredUpdates for Mongoose detection
+  if (updates.images) filteredUpdates.images = updates.images;
+  if (updates.videos) filteredUpdates.videos = updates.videos;
 
-  console.log("[updateProperty] isModified - images:", property.isModified('images'), "videos:", property.isModified('videos'));
-  
   // Apply updates
+  console.log("[updateProperty] Applying updates keys:", Object.keys(filteredUpdates));
   property.set(filteredUpdates);
   
-  console.log("[updateProperty] After set - isModified - images:", property.isModified('images'), "videos:", property.isModified('videos'));
+  // Explicitly mark arrays as modified
+  if (filteredUpdates.images) property.markModified("images");
+  if (filteredUpdates.videos) property.markModified("videos");
+  if (filteredUpdates.amenities) property.markModified("amenities");
+  if (filteredUpdates.address) property.markModified("address");
+
+  console.log("[updateProperty] Final modified paths:", property.modifiedPaths());
   
   try {
     await property.save();
-    console.log("[updateProperty] Save successful. Videos in DB:", property.videos.length);
+    console.log("[updateProperty] Save successful. Videos in DB:", property.videos?.length || 0);
   } catch (err) {
     if (err.name === 'ValidationError') {
       console.log("[updateProperty] Validation failed details:", JSON.stringify(err.errors, null, 2));
