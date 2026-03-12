@@ -260,6 +260,9 @@ const updateProperty = asyncHandler(async (req, res) => {
     } else {
       updates.videos = [...(property.videos || []), ...newVideos];
     }
+  } else if ((req.body.replaceVideos === "true" || req.body.replaceVideos === true) && (req.files?.videos?.length > 0 || req.files?.length > 0)) {
+    // If files were sent but none uploaded successfully
+    throw new ApiError(500, "Failed to upload video files to Cloudinary");
   }
 
   // safer update: avoid overwriting sensitive fields and use mongoose .set()
@@ -302,21 +305,25 @@ const updateProperty = asyncHandler(async (req, res) => {
   });
 
   // Handle images and videos only if they were successfully uploaded and processed
-  if (Array.isArray(updates.images) && updates.images.length > 0) {
-    filteredUpdates.images = updates.images;
+  if (Array.isArray(updates.images)) {
+    property.images = updates.images;
+    console.log("[updateProperty] Set property.images, count:", property.images.length);
   }
-  if (Array.isArray(updates.videos) && updates.videos.length > 0) {
-    filteredUpdates.videos = updates.videos;
+  if (Array.isArray(updates.videos)) {
+    property.videos = updates.videos;
+    console.log("[updateProperty] Set property.videos, count:", property.videos.length);
   }
 
-  console.log("[updateProperty] Final filteredUpdates keys:", Object.keys(filteredUpdates));
+  console.log("[updateProperty] isModified - images:", property.isModified('images'), "videos:", property.isModified('videos'));
   
   // Apply updates
   property.set(filteredUpdates);
   
+  console.log("[updateProperty] After set - isModified - images:", property.isModified('images'), "videos:", property.isModified('videos'));
+  
   try {
     await property.save();
-    console.log("[updateProperty] Save successful");
+    console.log("[updateProperty] Save successful. Videos in DB:", property.videos.length);
   } catch (err) {
     if (err.name === 'ValidationError') {
       console.log("[updateProperty] Validation failed details:", JSON.stringify(err.errors, null, 2));
