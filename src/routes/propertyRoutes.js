@@ -32,7 +32,7 @@ router.post(
   upload.fields([{ name: "images", maxCount: 5 },{ name: "videos", maxCount: 2 }]),
   createProperty
 );
-router.put(
+router.patch(
   "/:id",
   authMiddleware,
   upload.fields([{ name: "images", maxCount: 5 },{ name: "videos", maxCount: 2 }]),
