@@ -39,9 +39,24 @@ if (process.env.NODE_ENV !== "production") {
   });
 }
 
+// Request Logger
+app.use((req, res, next) => {
+  console.log(`[Incoming Request] ${req.method} ${req.originalUrl}`);
+  next();
+});
+
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/properties", propertyRoutes);
+
+// Catch-all 404 for unknown routes
+app.use((req, res, next) => {
+  console.log(`[404 Unknown Route] ${req.method} ${req.originalUrl}`);
+  res.status(404).json({
+    success: false,
+    message: `Route ${req.originalUrl} not found on this server`,
+  });
+});
 
 // Global Error Handler
 app.use((err, req, res, next) => {

@@ -123,9 +123,11 @@ const getProperties = asyncHandler(async (req, res) => {
     bedrooms,
     bathrooms,
     sort,
+    postedBy,
   } = req.query;
 
   const filter = {};
+  if (postedBy) filter.postedBy = postedBy;
   if (q) filter.$text = { $search: q };
   if (minPrice || maxPrice) {
     filter.price = {};
@@ -245,19 +247,39 @@ const updateProperty = asyncHandler(async (req, res) => {
   }
 
   // Handle Image Merging/Replacement
-  if (newImages.length > 0) {
+  let existingImages = [];
+  if (req.body.existingImages) {
+    try {
+      existingImages = typeof req.body.existingImages === "string" ? JSON.parse(req.body.existingImages) : req.body.existingImages;
+    } catch (e) {
+      existingImages = [];
+    }
+  }
+
+  if (newImages.length > 0 || req.body.replaceImages === "true" || req.body.replaceImages === true) {
     if (req.body.replaceImages === "true" || req.body.replaceImages === true) {
-      updates.images = newImages;
+      // If replacement requested, use ONLY new ones + explicitly provided existing ones
+      updates.images = [...existingImages, ...newImages];
     } else {
+      // Default: append new ones to the currently stored ones
       updates.images = [...(property.images || []), ...newImages];
     }
     console.log("[updateProperty] Images prepared, count:", updates.images.length);
   }
 
   // Handle Video Merging/Replacement
-  if (newVideos.length > 0) {
+  let existingVideos = [];
+  if (req.body.existingVideos) {
+    try {
+      existingVideos = typeof req.body.existingVideos === "string" ? JSON.parse(req.body.existingVideos) : req.body.existingVideos;
+    } catch (e) {
+      existingVideos = [];
+    }
+  }
+
+  if (newVideos.length > 0 || req.body.replaceVideos === "true" || req.body.replaceVideos === true) {
     if (req.body.replaceVideos === "true" || req.body.replaceVideos === true) {
-      updates.videos = newVideos;
+      updates.videos = [...existingVideos, ...newVideos];
     } else {
       updates.videos = [...(property.videos || []), ...newVideos];
     }
@@ -315,19 +337,19 @@ const updateProperty = asyncHandler(async (req, res) => {
     filteredUpdates[key] = value;
   });
 
-  // Include images and videos in filteredUpdates for Mongoose detection
-  if (updates.images) filteredUpdates.images = updates.images;
-  if (updates.videos) filteredUpdates.videos = updates.videos;
+  // Include images and videos in filteredUpdates for Mongoose detection (allow empty arrays for replacement)
+  if (Object.prototype.hasOwnProperty.call(updates, "images")) filteredUpdates.images = updates.images;
+  if (Object.prototype.hasOwnProperty.call(updates, "videos")) filteredUpdates.videos = updates.videos;
 
   // Apply updates
   console.log("[updateProperty] Applying updates keys:", Object.keys(filteredUpdates));
   property.set(filteredUpdates);
   
   // Explicitly mark arrays as modified
-  if (filteredUpdates.images) property.markModified("images");
-  if (filteredUpdates.videos) property.markModified("videos");
-  if (filteredUpdates.amenities) property.markModified("amenities");
-  if (filteredUpdates.address) property.markModified("address");
+  if (Object.prototype.hasOwnProperty.call(filteredUpdates, "images")) property.markModified("images");
+  if (Object.prototype.hasOwnProperty.call(filteredUpdates, "videos")) property.markModified("videos");
+  if (Object.prototype.hasOwnProperty.call(filteredUpdates, "amenities")) property.markModified("amenities");
+  if (Object.prototype.hasOwnProperty.call(filteredUpdates, "address")) property.markModified("address");
 
   console.log("[updateProperty] Final modified paths:", property.modifiedPaths());
   
