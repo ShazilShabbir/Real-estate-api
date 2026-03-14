@@ -12,13 +12,19 @@ dotenv.config({
   path: "./.env",
 });
 const app = express();
+const allowedOrigins = [
+  process.env.CORS_ORIGIN,
+  "http://localhost:3000",
+  "https://real-estate-app-shazil.vercel.app",
+].filter(Boolean);
+
 app.use(cors({ 
-  origin: process.env.CORS_ORIGIN || "http://localhost:3000",
-  credentials: true, // IMPORTANT: Allow cookies
+  origin: allowedOrigins,
+  credentials: true,
 }));
 app.use(cookieParser());
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
 // Health route for local + Vercel checks
 app.get("/", (req, res) => {
