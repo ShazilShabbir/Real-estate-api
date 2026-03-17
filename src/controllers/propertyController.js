@@ -2,6 +2,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import Property from "../models/Property.js";
+import User from "../models/User.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
@@ -47,7 +48,6 @@ const createProperty = asyncHandler(async (req, res) => {
   }
 
   // handle images and videos (multer)
-  // req.files can be an array (multiple single-field uploads) or an object when using upload.fields  
   const allFiles = [];
   if (Array.isArray(req.files)) {
     allFiles.push(...req.files);
@@ -60,13 +60,17 @@ const createProperty = asyncHandler(async (req, res) => {
   const images = [];
   const videos = [];
   for (const file of allFiles) {
-    if (!file || !file.path) continue;
+    if (!file || !file.path) {
+      console.log(`[createProperty] Skipping file with no path:`, file?.originalname);
+      continue;
+    }
     try {
       const resourceType = (file.fieldname === "videos" || (file.mimetype && file.mimetype.startsWith("video/"))) ? "video" : "image";
-      console.log(`[createProperty] Uploading ${resourceType} to Cloudinary:`, file.originalname);
       
       const uploaded = await uploadOnCloudinary(file.path, resourceType);
-      if (!uploaded || (!uploaded.secure_url && !uploaded.url)) continue;
+      if (!uploaded || (!uploaded.secure_url && !uploaded.url)) {
+        continue;
+      }
       
       const item = { url: uploaded.secure_url || uploaded.url, public_id: uploaded.public_id };
       if (resourceType === "video") {
@@ -77,6 +81,12 @@ const createProperty = asyncHandler(async (req, res) => {
     } catch (err) {
       console.error("[createProperty] Error uploading file:", file.originalname, err);
     }
+  }
+
+  // If the user sent images but none were uploaded, throw an error
+  const sentImagesCount = allFiles.filter(f => f.fieldname === "images" || (f.mimetype && f.mimetype.startsWith("image/"))).length;
+  if (sentImagesCount > 0 && images.length === 0) {
+    throw new ApiError(500, "Failed to upload images to Cloudinary. Please check the logs.");
   }
 
   const parsedLng = parseFloat(lng);
@@ -187,9 +197,6 @@ const updateProperty = asyncHandler(async (req, res) => {
   }
 
   const updates = { ...req.body };
-  console.log("[updateProperty] Raw body:", JSON.stringify(updates, null, 2));
-  console.log("[updateProperty] Files received:", req.files ? Object.keys(req.files) : "none");
-
   // if address provided as JSON string in multipart/form-data, parse it
   if (updates.address && typeof updates.address === "string") {
     try {
@@ -410,16 +417,31 @@ const toggleLike = asyncHandler(async (req, res) => {
   if (!property) throw new ApiError(404, "Property not found");
 
   const userId = req.user?._id;
-  const exists = property.likes?.some((l) => String(l) === String(userId));
-  if (exists) {
+  
+  // Update Property likes
+  const propertyLiked = property.likes?.some((l) => String(l) === String(userId));
+  if (propertyLiked) {
     property.likes = property.likes.filter((l) => String(l) !== String(userId));
   } else {
     property.likes = property.likes || [];
     property.likes.push(userId);
   }
-
   await property.save();
-  return res.status(200).json(new ApiResponse(200, property, "Toggled like"));
+
+  // Update User savedProperties
+  const user = await User.findById(userId);
+  if (user) {
+    const propertySaved = user.savedProperties?.some((p) => String(p) === String(id));
+    if (propertySaved) {
+      user.savedProperties = user.savedProperties.filter((p) => String(p) !== String(id));
+    } else {
+      user.savedProperties = user.savedProperties || [];
+      user.savedProperties.push(id);
+    }
+    await user.save();
+  }
+
+  return res.status(200).json(new ApiResponse(200, { property, user }, "Toggled like"));
 });
 
 export {

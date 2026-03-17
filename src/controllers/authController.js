@@ -25,19 +25,7 @@ const generateAccessAndRefereshTokens = async (userId) => {
 
 const registerUser = asyncHandler(async (req, res) => {
   //get user details from frontend
-  //validation - not empty
-  // check if already exist: username, email
-  // check for image, check for avatar
-  // upload them to cloudinary, avatar
-  // create user object - create entry in db
-  // remove password and refresh token field from response
-  // check for user creation
-  //return response
-  // console.log("REQ FILE:", req.file);
-  // console.log("REQ BODY:", req.body);
-  //get user details from frontend
   const { username, email, phone, password } = req.body || {};
-  //console.log("email:", email);
 
   //validation - not empty (phone is optional in model)
   if ([username, email, password].some((field) => field?.trim() === "")) {

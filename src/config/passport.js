@@ -19,12 +19,11 @@ passport.use(
     async (accessToken, refreshToken, profile, done) => {
       try {
         // Check if user already exists
-    console.log("📥 Google Profile Received:", {
+        console.log("📥 Google Profile Received:", {
           id: profile.id,
           email: profile.emails?.[0]?.value,
           name: profile.displayName,
         });
-
         let user = await User.findOne({ googleId: profile.id });
 
         if (!user) {

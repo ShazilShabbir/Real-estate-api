@@ -7,6 +7,7 @@ import propertyRoutes from "./src/routes/propertyRoutes.js";
 import passport from "passport";
 import "./src/config/passport.js";
 import cookieParser from "cookie-parser";
+import errorMiddleware from "./src/middleware/errorMiddleware.js";
 
 dotenv.config({
   path: "./.env",
@@ -65,37 +66,7 @@ app.use((req, res, next) => {
 });
 
 // Global Error Handler
-app.use((err, req, res, next) => {
-  let statusCode = err.statusCode || 500;
-  let message = err.message || "Something went wrong";
-  let errors = err.errors || [];
-
-  // Handle Mongoose Validation Errors
-  if (err.name === 'ValidationError') {
-    statusCode = 400;
-    message = "Validation Error";
-    errors = Object.values(err.errors).map(val => val.message);
-    console.log("[Mongoose Validation Error]:", JSON.stringify(err.errors, null, 2));
-  }
-
-  // Handle Mongoose Cast Errors (Invalid ID)
-  if (err.name === 'CastError') {
-    statusCode = 400;
-    message = `Invalid ${err.path}: ${err.value}`;
-  }
-
-  console.error(`[Error] ${statusCode} - ${message}`);
-  if (err.stack && process.env.NODE_ENV !== 'production') {
-    // console.error(err.stack); // Reduced noise
-  }
-
-  res.status(statusCode).json({
-    success: false,
-    statusCode,
-    message,
-    errors,
-  });
-});
+app.use(errorMiddleware);
 
 export default app;
 

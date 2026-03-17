@@ -1,5 +1,4 @@
 import mongoose from "mongoose";
-import mongoosePaginate from "mongoose-paginate-v2";
 const { Schema } = mongoose;
 
 const imageSchema = new Schema(
@@ -70,6 +69,5 @@ propertySchema.virtual("fullAddress").get(function () {
 	const a = this.address || {};
 	return [a.street, a.city, a.state, a.zipcode, a.postalCode, a.country].filter(Boolean).join(", ");
 });
-propertySchema.plugin(mongoosePaginate);
 export default mongoose.models.Property || mongoose.model("Property", propertySchema);
 
