@@ -44,13 +44,14 @@ const propertySchema = new Schema(
 				enum: ["Point"],
 				default: "Point",
 			},
-			coordinates: { type: [Number], index: "2dsphere" },
+			coordinates: { type: [Number] },
 		},
 		images: [imageSchema],
 		videos: [imageSchema],
 		amenities: [String],
 		postedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
 		isFeatured: { type: Boolean, default: false },
+		approved: { type: Boolean, default: false },
 		views: { type: Number, default: 0 },
 		likes: [{ type: Schema.Types.ObjectId, ref: "User" }],
 		meta: {
@@ -63,6 +64,10 @@ const propertySchema = new Schema(
 
 // Text index for quick searching
 propertySchema.index({ title: "text", description: "text", "address.city": "text", "address.state": "text" });
+// Geo index for nearby queries
+propertySchema.index({ location: "2dsphere" });
+// Index for approval queries
+propertySchema.index({ approved: 1 });
 
 // Virtual for full address
 propertySchema.virtual("fullAddress").get(function () {

@@ -5,7 +5,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "nodemon server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "seed": "node src/seed/seedProperties.js"
   },
   "type": "module",
   "keywords": [],
@@ -22,6 +23,7 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^8.19.2",
     "multer": "^2.0.2",
+    "nodemailer": "^8.0.7",
     "passport": "^0.6.0",
     "passport-facebook": "^3.0.0",
     "passport-google-oauth20": "^2.0.0"

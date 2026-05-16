@@ -8,19 +8,17 @@ import {
   deleteProperty,
   getNearbyProperties,
   toggleLike,
+  getCategoryCounts,
+  getLocations,
 } from "../controllers/propertyController.js";
 import authMiddleware from "../middleware/authMiddleware.js";
+import requireRole from "../middleware/roleMiddleware.js";
 
 const router = Router();
 
-// // ensure temp upload folder exists (uses existing public/temp directory)
-// const tempDir = path.join(process.cwd(), "public", "temp");
-// if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
-
-// // use disk storage so files have a `path` for Cloudinary upload helper
-// const upload = multer({ dest: tempDir });
-
 // Public
+router.get("/categories", getCategoryCounts);
+router.get("/locations", getLocations);
 router.get("/", getProperties);
 router.get("/nearby", getNearbyProperties);
 router.get("/:id", getPropertyById);
@@ -29,6 +27,7 @@ router.get("/:id", getPropertyById);
 router.post(
   "/create",
   authMiddleware,
+  requireRole("agent", "admin"),
   upload.fields([{ name: "images", maxCount: 5 },{ name: "videos", maxCount: 2 }]),
   createProperty
 );

@@ -3,6 +3,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import Property from "../models/Property.js";
 import User from "../models/User.js";
+import Setting from "../models/Setting.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
@@ -93,6 +94,8 @@ const createProperty = asyncHandler(async (req, res) => {
   const parsedLat = parseFloat(lat);
   const location = !isNaN(parsedLng) && !isNaN(parsedLat) ? { type: "Point", coordinates: [parsedLng, parsedLat] } : undefined;
 
+  const isFeaturedVal = isFeatured === "true" || isFeatured === true;
+
   const doc = {
     title,
     description,
@@ -109,8 +112,26 @@ const createProperty = asyncHandler(async (req, res) => {
     videos,
     amenities: amenities ? (typeof amenities === "string" ? amenities.split(",").map((a) => a.trim()).filter(Boolean) : amenities) : [],
     postedBy: req.user?._id,
-    isFeatured: isFeatured === "true" || isFeatured === true,
+    isFeatured: isFeaturedVal,
+    approved: req.user?.role === "admin",
   };
+
+  // Check auto_approve_properties setting
+  if (!doc.approved) {
+    const autoApproveSetting = await Setting.findOne({ key: "auto_approve_properties" }).lean();
+    const autoApprove = autoApproveSetting?.value === true || autoApproveSetting?.value === "true";
+    if (autoApprove) doc.approved = true;
+  }
+
+  // Check featured_property_limit
+  if (doc.isFeatured) {
+    const limitSetting = await Setting.findOne({ key: "featured_property_limit" }).lean();
+    const limit = parseInt(limitSetting?.value) || 10;
+    const currentFeatured = await Property.countDocuments({ isFeatured: true, _id: { $ne: null } });
+    if (currentFeatured >= limit) {
+      doc.isFeatured = false;
+    }
+  }
 
   const property = await Property.create(doc);
 
@@ -134,10 +155,16 @@ const getProperties = asyncHandler(async (req, res) => {
     bathrooms,
     sort,
     postedBy,
+    isFeatured,
   } = req.query;
 
   const filter = {};
+  // Only show approved properties to public; admin can see all
+  if (req.query.adminApproved !== "all") {
+    filter.approved = true;
+  }
   if (postedBy) filter.postedBy = postedBy;
+  if (isFeatured === "true") filter.isFeatured = true;
   if (q) filter.$text = { $search: q };
   if (minPrice || maxPrice) {
     filter.price = {};
@@ -444,6 +471,58 @@ const toggleLike = asyncHandler(async (req, res) => {
   return res.status(200).json(new ApiResponse(200, { property, user }, "Toggled like"));
 });
 
+// Get category counts and distinct cities for filter UI
+const getLocations = asyncHandler(async (req, res) => {
+  const { q } = req.query;
+
+  const match = {};
+  if (q && typeof q === "string" && q.trim()) {
+    const escaped = q.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    match.$or = [
+      { "address.city": { $regex: escaped, $options: "i" } },
+      { "address.state": { $regex: escaped, $options: "i" } },
+    ];
+  }
+
+  const results = await Property.aggregate([
+    { $match: match },
+    {
+      $group: {
+        _id: { city: "$address.city", state: "$address.state" },
+        count: { $sum: 1 },
+      },
+    },
+    { $sort: { count: -1 } },
+    {
+      $project: {
+        _id: 0,
+        city: "$_id.city",
+        state: "$_id.state",
+        count: 1,
+      },
+    },
+    { $limit: 10 },
+  ]);
+
+  return res.status(200).json(new ApiResponse(200, results, "Locations fetched"));
+});
+
+const getCategoryCounts = asyncHandler(async (req, res) => {
+  const categories = await Property.aggregate([
+    { $group: { _id: "$propertyType", count: { $sum: 1 } } },
+    { $sort: { count: -1 } },
+    { $project: { _id: 0, propertyType: "$_id", count: 1 } },
+  ]);
+
+  const cities = await Property.aggregate([
+    { $group: { _id: "$address.city", count: { $sum: 1 } } },
+    { $sort: { count: -1 } },
+    { $project: { _id: 0, city: "$_id", count: 1 } },
+  ]);
+
+  return res.status(200).json(new ApiResponse(200, { categories, cities }, "Category counts fetched"));
+});
+
 export {
   createProperty,
   getProperties,
@@ -453,4 +532,6 @@ export {
   deleteProperty,
   getNearbyProperties,
   toggleLike,
+  getCategoryCounts,
+  getLocations,
 };

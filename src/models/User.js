@@ -25,6 +25,10 @@ const userSchema = new Schema(
 		role: { type: String, enum: ["user", "admin", "agent"], default: "user" },
 		phone: { type: String },
 		savedProperties: [{ type: Schema.Types.ObjectId, ref: "Property" }],
+		agentApplication: {
+			status: { type: String, enum: ["none", "pending", "approved", "rejected"], default: "none" },
+			appliedAt: { type: Date },
+		},
 		  refreshToken: {
       type: String,
     },

@@ -10,6 +10,7 @@ import {
   getCurrentUser,
   updateAccountDetails,
   updateUserAvatar,
+  applyAsAgent,
   // OAuth handlers exported below
   oauthCallbackHandler,
 } from "../controllers/authController.js";
@@ -54,5 +55,6 @@ router.route("/me").get(authMiddleware, getCurrentUser);
 router.route("/account").put(authMiddleware,updateAccountDetails);
 router.route("/update-avatar").patch(authMiddleware, upload.single('avatar'), updateUserAvatar);
 router.route("/change-password").post(authMiddleware,changeCurrentPassword);
+router.route("/apply-agent").post(authMiddleware, applyAsAgent);
 
 export default router;

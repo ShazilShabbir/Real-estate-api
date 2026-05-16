@@ -356,6 +356,22 @@ const oauthCallbackHandler = asyncHandler(async (req, res, next) => {
   }
 });
 
+// ──────────────────────────────────────────────
+// AGENT APPLICATION
+// ──────────────────────────────────────────────
+export const applyAsAgent = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user._id);
+  if (!user) throw new ApiError(404, "User not found");
+  if (user.role === "admin") throw new ApiError(400, "Admins cannot apply as agent");
+  if (user.agentApplication?.status === "pending") throw new ApiError(400, "Application already pending");
+  if (user.agentApplication?.status === "approved") throw new ApiError(400, "You are already an agent");
+
+  user.agentApplication = { status: "pending", appliedAt: new Date() };
+  await user.save({ validateBeforeSave: false });
+
+  res.status(200).json(new ApiResponse(200, { applicationStatus: "pending" }, "Agent application submitted"));
+});
+
 export {
   registerUser,
   loginUser,

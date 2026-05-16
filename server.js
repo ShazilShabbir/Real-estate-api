@@ -1,9 +1,14 @@
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
+import path from "path";
 import connectDB from "./src/config/db.js";
 import authRoutes from "./src/routes/authRoutes.js";
 import propertyRoutes from "./src/routes/propertyRoutes.js";
+import adminRoutes from "./src/routes/adminRoutes.js";
+import inquiryRoutes from "./src/routes/inquiryRoutes.js";
+import publicRoutes from "./src/routes/publicRoutes.js";
+import agentRoutes from "./src/routes/agentRoutes.js";
 import passport from "passport";
 import "./src/config/passport.js";
 import cookieParser from "cookie-parser";
@@ -26,6 +31,7 @@ app.use(cors({
 app.use(cookieParser());
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+app.use("/uploads", express.static(path.resolve("public/uploads")));
 
 // Health route for local + Vercel checks
 app.get("/", (req, res) => {
@@ -55,6 +61,10 @@ app.use((req, res, next) => {
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/properties", propertyRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/inquiries", inquiryRoutes);
+app.use("/api/public", publicRoutes);
+app.use("/api/agent", agentRoutes);
 
 // Catch-all 404 for unknown routes
 app.use((req, res, next) => {
