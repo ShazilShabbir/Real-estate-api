@@ -1,6 +1,8 @@
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import path from "path";
 import connectDB from "./src/config/db.js";
 import authRoutes from "./src/routes/authRoutes.js";
@@ -18,6 +20,7 @@ dotenv.config({
   path: "./.env",
 });
 const app = express();
+app.set("trust proxy", 1);
 
 const allowedOrigins = [
   process.env.CORS_ORIGIN,
@@ -31,15 +34,25 @@ app.use(cors({
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      callback(null, true);
+      callback(new Error("Not allowed by CORS"));
     }
   },
   credentials: true,
 }));
+app.use(helmet());
 app.use(cookieParser());
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 app.use("/uploads", express.static(path.resolve("public/uploads")));
+
+// Rate limiting
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { success: false, message: "Too many requests, please try again later" },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // Health route for local + Vercel checks
 app.get("/", (req, res) => {
@@ -47,27 +60,41 @@ app.get("/", (req, res) => {
 });
 app.use(passport.initialize());
 
-// Connect DB and passport
-
+// Connect DB
 connectDB().catch((err) => {
   console.error("MONGO db connection failed:", err);
 });
 
 if (process.env.NODE_ENV !== "production") {
   const port = process.env.PORT || 8000;
-  app.listen(port, () => {
+  const server = app.listen(port, () => {
     console.log(`Server running on ${port}`);
+  });
+
+  const shutdown = async () => {
+    console.log("Shutting down gracefully...");
+    server.close(async () => {
+      const mongoose = (await import("mongoose")).default;
+      await mongoose.connection.close();
+      console.log("MongoDB connection closed");
+      process.exit(0);
+    });
+    setTimeout(() => process.exit(1), 10000);
+  };
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
+}
+
+// Request Logger (dev only)
+if (process.env.NODE_ENV !== "production") {
+  app.use((req, res, next) => {
+    console.log(`[Incoming Request] ${req.method} ${req.originalUrl}`);
+    next();
   });
 }
 
-// Request Logger
-app.use((req, res, next) => {
-  console.log(`[Incoming Request] ${req.method} ${req.originalUrl}`);
-  next();
-});
-
 // Routes
-app.use("/api/auth", authRoutes);
+app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api/properties", propertyRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/inquiries", inquiryRoutes);

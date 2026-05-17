@@ -309,50 +309,30 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
 const oauthCallbackHandler = asyncHandler(async (req, res, next) => {
   try {
     const user = req.user;
-
-    // check if user already exists
-    const existingUser = await User.findById(user._id);
-    if (existingUser) {
-      // FIXED: Proper error handling
-      return res
-        .json({ message: "User is already registered" })
-        .redirect(`${process.env.CORS_ORIGIN}/login?error=oauth_failed`);
-    }
-
     if (!user) {
-      // FIXED: Proper error handling
-      return res.redirect(
-        `${process.env.CORS_ORIGIN}/login?error=oauth_failed`,
-      );
+      return res.redirect(`${process.env.CORS_ORIGIN}/login?error=oauth_failed`);
     }
 
-    const { accessToken, refreshToken } = await generateAccessAndRefereshTokens(
-      user._id,
-    );
+    const { accessToken, refreshToken } = await generateAccessAndRefereshTokens(user._id);
 
     const cookieOptions = {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     };
 
-    // Set cookies
     res.cookie("accessToken", accessToken, cookieOptions);
     res.cookie("refreshToken", refreshToken, cookieOptions);
 
-    // FIXED: Use CLIENT_REDIRECT_URL or CORS_ORIGIN
     const redirectUrl =
       process.env.CLIENT_REDIRECT_URL ||
       process.env.CORS_ORIGIN ||
       "http://localhost:3000";
 
-    // Redirect to frontend
     return res.redirect(`${redirectUrl}/auth/success`);
   } catch (err) {
-    return res.redirect(
-      `${process.env.CORS_ORIGIN}/login?error=token_generation_failed`,
-    );
+    return res.redirect(`${process.env.CORS_ORIGIN}/login?error=token_generation_failed`);
   }
 });
 

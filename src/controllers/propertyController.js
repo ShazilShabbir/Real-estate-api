@@ -8,6 +8,7 @@ import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 dotenv.config();
+const DEBUG = process.env.NODE_ENV !== "production";
 
 
 
@@ -62,7 +63,7 @@ const createProperty = asyncHandler(async (req, res) => {
   const videos = [];
   for (const file of allFiles) {
     if (!file || !file.path) {
-      console.log(`[createProperty] Skipping file with no path:`, file?.originalname);
+      DEBUG && console.log(`[createProperty] Skipping file with no path:`, file?.originalname);
       continue;
     }
     try {
@@ -282,15 +283,15 @@ const updateProperty = asyncHandler(async (req, res) => {
     if (!file || !file.path) continue;
     try {
       const resourceType = (file.fieldname === "videos" || (file.mimetype && file.mimetype.startsWith("video/"))) ? "video" : "image";
-      console.log(`[updateProperty] Uploading ${resourceType} to Cloudinary:`, file.originalname);
+      DEBUG && console.log(`[updateProperty] Uploading ${resourceType} to Cloudinary:`, file.originalname);
       
       const uploaded = await uploadOnCloudinary(file.path, resourceType);
       if (!uploaded || (!uploaded.secure_url && !uploaded.url)) {
-        console.log("[updateProperty] Upload failed or URL missing for file:", file.fieldname, file.originalname);
+        DEBUG && console.log("[updateProperty] Upload failed or URL missing for file:", file.fieldname, file.originalname);
         continue;
       }
       
-      console.log("[updateProperty] Upload successful:", uploaded.secure_url || uploaded.url);
+      DEBUG && console.log("[updateProperty] Upload successful:", uploaded.secure_url || uploaded.url);
       const item = { url: uploaded.secure_url || uploaded.url, public_id: uploaded.public_id };
       
       if (resourceType === "video") {
@@ -321,7 +322,7 @@ const updateProperty = asyncHandler(async (req, res) => {
       // Default: append new ones to the currently stored ones
       updates.images = [...(property.images || []), ...newImages];
     }
-    console.log("[updateProperty] Images prepared, count:", updates.images.length);
+    DEBUG && console.log("[updateProperty] Images prepared, count:", updates.images.length);
   }
 
   // Handle Video Merging/Replacement
@@ -340,7 +341,7 @@ const updateProperty = asyncHandler(async (req, res) => {
     } else {
       updates.videos = [...(property.videos || []), ...newVideos];
     }
-    console.log("[updateProperty] Videos prepared, count:", updates.videos.length);
+    DEBUG && console.log("[updateProperty] Videos prepared, count:", updates.videos.length);
   } else if ((req.body.replaceVideos === "true" || req.body.replaceVideos === true) && (req.files?.videos?.length > 0 || req.files?.length > 0)) {
     // If files were sent but none uploaded successfully
     throw new ApiError(500, "Failed to upload video files to Cloudinary");
@@ -399,7 +400,7 @@ const updateProperty = asyncHandler(async (req, res) => {
   if (Object.prototype.hasOwnProperty.call(updates, "videos")) filteredUpdates.videos = updates.videos;
 
   // Apply updates
-  console.log("[updateProperty] Applying updates keys:", Object.keys(filteredUpdates));
+  DEBUG && console.log("[updateProperty] Applying updates keys:", Object.keys(filteredUpdates));
   property.set(filteredUpdates);
   
   // Explicitly mark arrays as modified
@@ -408,14 +409,14 @@ const updateProperty = asyncHandler(async (req, res) => {
   if (Object.prototype.hasOwnProperty.call(filteredUpdates, "amenities")) property.markModified("amenities");
   if (Object.prototype.hasOwnProperty.call(filteredUpdates, "address")) property.markModified("address");
 
-  console.log("[updateProperty] Final modified paths:", property.modifiedPaths());
+  DEBUG && console.log("[updateProperty] Final modified paths:", property.modifiedPaths());
   
   try {
     await property.save();
-    console.log("[updateProperty] Save successful. Videos in DB:", property.videos?.length || 0);
+    DEBUG && console.log("[updateProperty] Save successful. Videos in DB:", property.videos?.length || 0);
   } catch (err) {
     if (err.name === 'ValidationError') {
-      console.log("[updateProperty] Validation failed details:", JSON.stringify(err.errors, null, 2));
+      DEBUG && console.log("[updateProperty] Validation failed details:", JSON.stringify(err.errors, null, 2));
     } else {
       console.error("[updateProperty] Save error:", err);
     }
