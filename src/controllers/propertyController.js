@@ -156,6 +156,7 @@ const getProperties = asyncHandler(async (req, res) => {
     sort,
     postedBy,
     isFeatured,
+    bounds,
   } = req.query;
 
   const filter = {};
@@ -176,6 +177,28 @@ const getProperties = asyncHandler(async (req, res) => {
   if (propertyType) filter.propertyType = propertyType;
   if (bedrooms) filter.bedrooms = { $gte: parseInt(bedrooms, 10) };
   if (bathrooms) filter.bathrooms = { $gte: parseInt(bathrooms, 10) };
+
+  // Map bounds filter — format: "swLat,swLng,neLat,neLng"
+  if (bounds) {
+    const parts = bounds.split(",").map(Number);
+    if (parts.length === 4 && parts.every((n) => !isNaN(n))) {
+      const [swLat, swLng, neLat, neLng] = parts;
+      filter.location = {
+        $geoWithin: {
+          $geometry: {
+            type: "Polygon",
+            coordinates: [[
+              [swLng, swLat],
+              [neLng, swLat],
+              [neLng, neLat],
+              [swLng, neLat],
+              [swLng, swLat],
+            ]],
+          },
+        },
+      };
+    }
+  }
 
   let sortObj = { createdAt: -1 };
   if (sort === "price_asc") sortObj = { price: 1 };
