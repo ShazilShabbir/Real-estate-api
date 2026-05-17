@@ -18,14 +18,22 @@ dotenv.config({
   path: "./.env",
 });
 const app = express();
+
 const allowedOrigins = [
   process.env.CORS_ORIGIN,
   "http://localhost:3000",
   "https://real-estate-app-shazil.vercel.app",
+  "https://real-estate-api-cyan.vercel.app",
 ].filter(Boolean);
 
-app.use(cors({ 
-  origin: allowedOrigins,
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(null, true);
+    }
+  },
   credentials: true,
 }));
 app.use(cookieParser());
