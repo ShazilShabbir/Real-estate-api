@@ -22,16 +22,34 @@ dotenv.config({
 const app = express();
 app.set("trust proxy", 1);
 
+const configuredOrigins = [process.env.CORS_ORIGIN, process.env.CORS_ORIGINS]
+  .filter(Boolean)
+  .flatMap((value) => value.split(","))
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 const allowedOrigins = [
-  process.env.CORS_ORIGIN,
+  ...configuredOrigins,
   "http://localhost:3000",
   "https://real-estate-app-shazil.vercel.app",
+  "https://real-estate-frontend.vercel.app",
   "https://real-estate-api-cyan.vercel.app",
-].filter(Boolean);
+];
+
+const allowedOriginPatterns = [
+  /^https:\/\/real-estate-frontend(?:-[a-z0-9-]+)?\.vercel\.app$/,
+  /^https:\/\/real-estate-app-shazil(?:-[a-z0-9-]+)?\.vercel\.app$/,
+];
+
+function isAllowedOrigin(origin) {
+  if (!origin) return true;
+  if (allowedOrigins.includes(origin)) return true;
+  return allowedOriginPatterns.some((pattern) => pattern.test(origin));
+}
 
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (isAllowedOrigin(origin)) {
       callback(null, true);
     } else {
       callback(new Error("Not allowed by CORS"));
