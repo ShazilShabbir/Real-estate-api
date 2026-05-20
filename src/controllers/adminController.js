@@ -858,17 +858,12 @@ export const uploadLogo = [
   asyncHandler(async (req, res) => {
     if (!req.file) throw new ApiError(400, "Logo file is required");
 
-    const destDir = path.resolve("public/uploads/logo");
-    fs.mkdirSync(destDir, { recursive: true });
+    const uploadedLogo = await uploadOnCloudinary(req.file.path, "image");
+    const url = uploadedLogo?.secure_url;
 
-    const ext = path.extname(req.file.originalname) || ".png";
-    const filename = `logo-${Date.now()}${ext}`;
-    const destPath = path.join(destDir, filename);
-
-    fs.copyFileSync(req.file.path, destPath);
-    fs.unlinkSync(req.file.path); // remove temp file
-
-    const url = `/uploads/logo/${filename}`;
+    if (!url) {
+      throw new ApiError(500, "Logo upload failed");
+    }
 
     await Setting.updateOne({ key: "site_logo" }, { $set: { key: "site_logo", value: url } }, { upsert: true });
 

@@ -280,7 +280,7 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
 
     const avatar = await uploadOnCloudinary(avatarLocalPath);
 
-    if (!avatar.url) {
+    if (!avatar?.secure_url) {
       throw new ApiError(400, "Error while uploading on avatar");
     }
 
@@ -288,7 +288,7 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
       req.user?._id,
       {
         $set: {
-          avatar: avatar.url,
+          avatar: avatar.secure_url,
         },
       },
       { new: true },
