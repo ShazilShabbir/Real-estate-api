@@ -28,14 +28,14 @@ const configuredOrigins = [process.env.CORS_ORIGIN, process.env.CORS_ORIGINS]
   .map((origin) => origin.trim())
   .filter(Boolean);
 
-const allowedOrigins = [
+const allowedOrigins = [...new Set([
   ...configuredOrigins,
   "http://localhost:3000",
   "https://real-estate-app-shazil.vercel.app",
   "https://real-estate-frontend.vercel.app",
   "https://real-estate-frontend-gamma-topaz.vercel.app",
   "https://real-estate-api-cyan.vercel.app",
-];
+])];
 
 const allowedOriginPatterns = [
   /^https:\/\/real-estate-frontend(?:-[a-z0-9-]+)?\.vercel\.app$/,
@@ -48,7 +48,7 @@ function isAllowedOrigin(origin) {
   return allowedOriginPatterns.some((pattern) => pattern.test(origin));
 }
 
-app.use(cors({
+const corsOptions = {
   origin(origin, callback) {
     if (isAllowedOrigin(origin)) {
       callback(null, true);
@@ -57,7 +57,37 @@ app.use(cors({
     }
   },
   credentials: true,
-}));
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  optionsSuccessStatus: 204,
+};
+
+app.use((req, res, next) => {
+  const requestOrigin = req.headers.origin;
+
+  if (requestOrigin && isAllowedOrigin(requestOrigin)) {
+    res.header("Access-Control-Allow-Origin", requestOrigin);
+    res.header("Vary", "Origin");
+    res.header("Access-Control-Allow-Credentials", "true");
+    res.header("Access-Control-Allow-Methods", corsOptions.methods.join(","));
+    res.header("Access-Control-Allow-Headers", corsOptions.allowedHeaders.join(","));
+  }
+
+  if (req.method === "OPTIONS") {
+    if (requestOrigin && !isAllowedOrigin(requestOrigin)) {
+      return res.status(403).json({
+        success: false,
+        message: "Not allowed by CORS",
+      });
+    }
+
+    return res.sendStatus(corsOptions.optionsSuccessStatus);
+  }
+
+  next();
+});
+
+app.use(cors(corsOptions));
 app.use(helmet());
 app.use(cookieParser());
 app.use(express.json({ limit: "50mb" }));
