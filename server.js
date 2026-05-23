@@ -33,6 +33,7 @@ const allowedOrigins = [
   "http://localhost:3000",
   "https://real-estate-app-shazil.vercel.app",
   "https://real-estate-frontend.vercel.app",
+  "https://real-estate-frontend-gamma-topaz.vercel.app",
   "https://real-estate-api-cyan.vercel.app",
 ];
 
