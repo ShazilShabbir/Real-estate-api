@@ -4,12 +4,122 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import Property from "../models/Property.js";
 import User from "../models/User.js";
 import Setting from "../models/Setting.js";
-import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import {
+  DEFAULT_PROPERTY_FOLDER,
+  createUploadSignature,
+  uploadOnCloudinary,
+} from "../utils/cloudinary.js";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 dotenv.config();
 const DEBUG = process.env.NODE_ENV !== "production";
 
+const parseStructuredField = (value, fallback) => {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value);
+    } catch (err) {
+      return fallback;
+    }
+  }
+  return value;
+};
+
+const normalizeMediaArray = (value) => {
+  const parsed = parseStructuredField(value, []);
+  if (!Array.isArray(parsed)) return [];
+
+  return parsed
+    .map((item) => {
+      if (!item) return null;
+      if (typeof item === "string") {
+        return { url: item, public_id: "" };
+      }
+      if (typeof item === "object" && typeof item.url === "string") {
+        return {
+          url: item.url,
+          public_id: typeof item.public_id === "string" ? item.public_id : "",
+        };
+      }
+      return null;
+    })
+    .filter(Boolean);
+};
+
+const collectUploadedMedia = async (files = []) => {
+  const images = [];
+  const videos = [];
+
+  for (const file of files) {
+    if (!file || !file.path) {
+      DEBUG && console.log("[propertyMedia] Skipping file with no path:", file?.originalname);
+      continue;
+    }
+
+    try {
+      const resourceType =
+        file.fieldname === "videos" || (file.mimetype && file.mimetype.startsWith("video/"))
+          ? "video"
+          : "image";
+
+      const uploaded = await uploadOnCloudinary(
+        file.path,
+        resourceType,
+        DEFAULT_PROPERTY_FOLDER,
+      );
+
+      if (!uploaded || (!uploaded.secure_url && !uploaded.url)) {
+        continue;
+      }
+
+      const item = {
+        url: uploaded.secure_url || uploaded.url,
+        public_id: uploaded.public_id || "",
+      };
+
+      if (resourceType === "video") {
+        videos.push(item);
+      } else {
+        images.push(item);
+      }
+    } catch (err) {
+      console.error("[propertyMedia] Error uploading file:", file.originalname, err);
+    }
+  }
+
+  return { images, videos };
+};
+
+const getRequestFiles = (req) => {
+  const files = [];
+  if (Array.isArray(req.files)) {
+    files.push(...req.files);
+  } else if (req.files && typeof req.files === "object") {
+    Object.values(req.files).forEach((value) => {
+      if (Array.isArray(value)) files.push(...value);
+    });
+  }
+  return files;
+};
+
+const createPropertyUploadSignature = asyncHandler(async (req, res) => {
+  const { resourceType } = req.body || {};
+
+  if (!["image", "video"].includes(resourceType)) {
+    throw new ApiError(400, "resourceType must be image or video");
+  }
+
+  const signedUpload = createUploadSignature({
+    folder: DEFAULT_PROPERTY_FOLDER,
+    resourceType,
+    timestamp: Math.floor(Date.now() / 1000),
+  });
+
+  return res.status(200).json(
+    new ApiResponse(200, signedUpload, "Upload signature created"),
+  );
+});
 
 
 // Create a property
@@ -38,55 +148,20 @@ const createProperty = asyncHandler(async (req, res) => {
   // parse address whether sent as JSON string (multipart/form-data) or object (application/json)
   let parsedAddress;
   if (address) {
-    if (typeof address === "string") {
-      try {
-        parsedAddress = JSON.parse(address);
-      } catch (err) {
-        parsedAddress = undefined;
-      }
-    } else {
-      parsedAddress = address;
-    }
+    parsedAddress = parseStructuredField(address, undefined);
   }
 
-  // handle images and videos (multer)
-  const allFiles = [];
-  if (Array.isArray(req.files)) {
-    allFiles.push(...req.files);
-  } else if (req.files && typeof req.files === "object") {
-    Object.values(req.files).forEach((v) => {
-      if (Array.isArray(v)) allFiles.push(...v);
-    });
-  }
-
-  const images = [];
-  const videos = [];
-  for (const file of allFiles) {
-    if (!file || !file.path) {
-      DEBUG && console.log(`[createProperty] Skipping file with no path:`, file?.originalname);
-      continue;
-    }
-    try {
-      const resourceType = (file.fieldname === "videos" || (file.mimetype && file.mimetype.startsWith("video/"))) ? "video" : "image";
-      
-      const uploaded = await uploadOnCloudinary(file.path, resourceType);
-      if (!uploaded || (!uploaded.secure_url && !uploaded.url)) {
-        continue;
-      }
-      
-      const item = { url: uploaded.secure_url || uploaded.url, public_id: uploaded.public_id };
-      if (resourceType === "video") {
-        videos.push(item);
-      } else {
-        images.push(item);
-      }
-    } catch (err) {
-      console.error("[createProperty] Error uploading file:", file.originalname, err);
-    }
-  }
+  const directImages = normalizeMediaArray(req.body.images);
+  const directVideos = normalizeMediaArray(req.body.videos);
+  const allFiles = getRequestFiles(req);
+  const uploadedMedia = await collectUploadedMedia(allFiles);
+  const images = directImages.length > 0 ? directImages : uploadedMedia.images;
+  const videos = directVideos.length > 0 ? directVideos : uploadedMedia.videos;
 
   // If the user sent images but none were uploaded, throw an error
-  const sentImagesCount = allFiles.filter(f => f.fieldname === "images" || (f.mimetype && f.mimetype.startsWith("image/"))).length;
+  const sentImagesCount = allFiles.filter(
+    (file) => file.fieldname === "images" || (file.mimetype && file.mimetype.startsWith("image/")),
+  ).length;
   if (sentImagesCount > 0 && images.length === 0) {
     throw new ApiError(500, "Failed to upload images to Cloudinary. Please check the logs.");
   }
@@ -250,11 +325,7 @@ const updateProperty = asyncHandler(async (req, res) => {
   const updates = { ...req.body };
   // if address provided as JSON string in multipart/form-data, parse it
   if (updates.address && typeof updates.address === "string") {
-    try {
-      updates.address = JSON.parse(updates.address);
-    } catch (err) {
-      // keep as-is if parsing fails
-    }
+    updates.address = parseStructuredField(updates.address, updates.address);
   }
 
   // handle location if provided
@@ -268,51 +339,15 @@ const updateProperty = asyncHandler(async (req, res) => {
 
   // handle images - if req.files.images provided and replaceImages flag true, replace; otherwise append
   // handle images and videos from multer uploads
-  const _allFiles = [];
-  if (Array.isArray(req.files)) {
-    _allFiles.push(...req.files);
-  } else if (req.files && typeof req.files === "object") {
-    Object.values(req.files).forEach((v) => {
-      if (Array.isArray(v)) _allFiles.push(...v);
-    });
-  }
-
-  const newImages = [];
-  const newVideos = [];
-  for (const file of _allFiles) {
-    if (!file || !file.path) continue;
-    try {
-      const resourceType = (file.fieldname === "videos" || (file.mimetype && file.mimetype.startsWith("video/"))) ? "video" : "image";
-      DEBUG && console.log(`[updateProperty] Uploading ${resourceType} to Cloudinary:`, file.originalname);
-      
-      const uploaded = await uploadOnCloudinary(file.path, resourceType);
-      if (!uploaded || (!uploaded.secure_url && !uploaded.url)) {
-        DEBUG && console.log("[updateProperty] Upload failed or URL missing for file:", file.fieldname, file.originalname);
-        continue;
-      }
-      
-      DEBUG && console.log("[updateProperty] Upload successful:", uploaded.secure_url || uploaded.url);
-      const item = { url: uploaded.secure_url || uploaded.url, public_id: uploaded.public_id };
-      
-      if (resourceType === "video") {
-        newVideos.push(item);
-      } else {
-        newImages.push(item);
-      }
-    } catch (err) {
-      console.error("[updateProperty] Upload error for file:", file.originalname, err);
-    }
-  }
+  const allFiles = getRequestFiles(req);
+  const uploadedMedia = await collectUploadedMedia(allFiles);
+  const directImages = normalizeMediaArray(req.body.images);
+  const directVideos = normalizeMediaArray(req.body.videos);
+  const newImages = [...directImages, ...uploadedMedia.images];
+  const newVideos = [...directVideos, ...uploadedMedia.videos];
 
   // Handle Image Merging/Replacement
-  let existingImages = [];
-  if (req.body.existingImages) {
-    try {
-      existingImages = typeof req.body.existingImages === "string" ? JSON.parse(req.body.existingImages) : req.body.existingImages;
-    } catch (e) {
-      existingImages = [];
-    }
-  }
+  const existingImages = normalizeMediaArray(req.body.existingImages);
 
   if (newImages.length > 0 || req.body.replaceImages === "true" || req.body.replaceImages === true) {
     if (req.body.replaceImages === "true" || req.body.replaceImages === true) {
@@ -326,14 +361,7 @@ const updateProperty = asyncHandler(async (req, res) => {
   }
 
   // Handle Video Merging/Replacement
-  let existingVideos = [];
-  if (req.body.existingVideos) {
-    try {
-      existingVideos = typeof req.body.existingVideos === "string" ? JSON.parse(req.body.existingVideos) : req.body.existingVideos;
-    } catch (e) {
-      existingVideos = [];
-    }
-  }
+  const existingVideos = normalizeMediaArray(req.body.existingVideos);
 
   if (newVideos.length > 0 || req.body.replaceVideos === "true" || req.body.replaceVideos === true) {
     if (req.body.replaceVideos === "true" || req.body.replaceVideos === true) {
@@ -342,7 +370,10 @@ const updateProperty = asyncHandler(async (req, res) => {
       updates.videos = [...(property.videos || []), ...newVideos];
     }
     DEBUG && console.log("[updateProperty] Videos prepared, count:", updates.videos.length);
-  } else if ((req.body.replaceVideos === "true" || req.body.replaceVideos === true) && (req.files?.videos?.length > 0 || req.files?.length > 0)) {
+  } else if (
+    (req.body.replaceVideos === "true" || req.body.replaceVideos === true) &&
+    (req.files?.videos?.length > 0 || req.files?.length > 0)
+  ) {
     // If files were sent but none uploaded successfully
     throw new ApiError(500, "Failed to upload video files to Cloudinary");
   }
@@ -548,6 +579,7 @@ const getCategoryCounts = asyncHandler(async (req, res) => {
 });
 
 export {
+  createPropertyUploadSignature,
   createProperty,
   getProperties,
   // cursor based pagination,

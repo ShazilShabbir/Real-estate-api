@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { upload } from "../middleware/multerMiddleware.js";
 import {
+  createPropertyUploadSignature,
   createProperty,
   getProperties,
   getPropertyById,
@@ -21,6 +22,12 @@ router.get("/categories", getCategoryCounts);
 router.get("/locations", getLocations);
 router.get("/", getProperties);
 router.get("/nearby", getNearbyProperties);
+router.post(
+  "/upload-signature",
+  authMiddleware,
+  requireRole("agent", "admin"),
+  createPropertyUploadSignature,
+);
 router.get("/:id", getPropertyById);
 
 // Protected - require authentication

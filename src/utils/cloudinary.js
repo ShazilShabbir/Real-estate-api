@@ -1,36 +1,56 @@
-import { v2 as cloudinary} from "cloudinary";
-import fs from"fs"
+import { v2 as cloudinary } from "cloudinary";
+import fs from "fs";
 import dotenv from "dotenv";
 dotenv.config();
-          
+
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-const uploadOnCloudinary = async (localFilePath, resourceType = "auto") => {
-    try {
-        if (!localFilePath) return null
-        //upload the file on cloudinary
-      const response = await cloudinary.uploader.upload(localFilePath,{
-        folder: "real-estate/avatars",
-        resource_type: resourceType
-        })
-        //file has been uploaded successfully
+const DEFAULT_AVATAR_FOLDER = "real-estate/avatars";
+const DEFAULT_PROPERTY_FOLDER = "real-estate/properties";
 
-     if (fs.existsSync(localFilePath)) {
+const uploadOnCloudinary = async (localFilePath, resourceType = "auto", folder = DEFAULT_AVATAR_FOLDER) => {
+  try {
+    if (!localFilePath) return null;
+    const response = await cloudinary.uploader.upload(localFilePath, {
+      folder,
+      resource_type: resourceType,
+    });
+
+    if (fs.existsSync(localFilePath)) {
       fs.unlinkSync(localFilePath);
     }
-        return response
-    } catch (error) {
-        console.error("Cloudinary FULL ERROR:", error);
-        if (fs.existsSync(localFilePath)) {
-            fs.unlinkSync(localFilePath);
-        } // remove the locally saved temporary file as the upload operation got failed
-        return null
+    return response;
+  } catch (error) {
+    console.error("Cloudinary FULL ERROR:", error);
+    if (fs.existsSync(localFilePath)) {
+      fs.unlinkSync(localFilePath);
     }
-}
+    return null;
+  }
+};
 
+const createUploadSignature = ({ folder = DEFAULT_PROPERTY_FOLDER, resourceType = "image", timestamp }) => {
+  const normalizedResourceType = resourceType === "video" ? "video" : "image";
+  const uploadTimestamp = Number(timestamp) || Math.floor(Date.now() / 1000);
+  const paramsToSign = {
+    folder,
+    resource_type: normalizedResourceType,
+    timestamp: uploadTimestamp,
+  };
 
-export{uploadOnCloudinary}
+  return {
+    ...paramsToSign,
+    signature: cloudinary.utils.api_sign_request(
+      paramsToSign,
+      process.env.CLOUDINARY_API_SECRET,
+    ),
+    cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+    apiKey: process.env.CLOUDINARY_API_KEY,
+  };
+};
+
+export { cloudinary, DEFAULT_PROPERTY_FOLDER, uploadOnCloudinary, createUploadSignature };
