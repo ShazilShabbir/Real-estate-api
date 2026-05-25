@@ -192,24 +192,49 @@ const createProperty = asyncHandler(async (req, res) => {
     approved: req.user?.role === "admin",
   };
 
-  // Check auto_approve_properties setting
+  // Best-effort settings lookup: property creation should not fail if a setting read errors.
   if (!doc.approved) {
-    const autoApproveSetting = await Setting.findOne({ key: "auto_approve_properties" }).lean();
-    const autoApprove = autoApproveSetting?.value === true || autoApproveSetting?.value === "true";
-    if (autoApprove) doc.approved = true;
-  }
-
-  // Check featured_property_limit
-  if (doc.isFeatured) {
-    const limitSetting = await Setting.findOne({ key: "featured_property_limit" }).lean();
-    const limit = parseInt(limitSetting?.value) || 10;
-    const currentFeatured = await Property.countDocuments({ isFeatured: true, _id: { $ne: null } });
-    if (currentFeatured >= limit) {
-      doc.isFeatured = false;
+    try {
+      const autoApproveSetting = await Setting.findOne({ key: "auto_approve_properties" }).lean();
+      const autoApprove =
+        autoApproveSetting?.value === true || autoApproveSetting?.value === "true";
+      if (autoApprove) doc.approved = true;
+    } catch (error) {
+      console.error("[createProperty] Failed to read auto approval setting:", error);
     }
   }
 
-  const property = await Property.create(doc);
+  if (doc.isFeatured) {
+    try {
+      const limitSetting = await Setting.findOne({ key: "featured_property_limit" }).lean();
+      const limit = parseInt(limitSetting?.value, 10) || 10;
+      const currentFeatured = await Property.countDocuments({
+        isFeatured: true,
+        _id: { $ne: null },
+      });
+      if (currentFeatured >= limit) {
+        doc.isFeatured = false;
+      }
+    } catch (error) {
+      console.error("[createProperty] Failed to enforce featured property limit:", error);
+    }
+  }
+
+  let property;
+  try {
+    property = await Property.create(doc);
+  } catch (error) {
+    console.error("[createProperty] Property.create failed", {
+      userId: req.user?._id,
+      hasAddress: Boolean(doc.address),
+      imageCount: images.length,
+      videoCount: videos.length,
+      isFeatured: doc.isFeatured,
+      approved: doc.approved,
+      error,
+    });
+    throw error;
+  }
 
   return res.status(201).json(new ApiResponse(201, property, "Property created"));
 });

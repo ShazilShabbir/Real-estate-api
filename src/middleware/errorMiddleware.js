@@ -31,9 +31,9 @@ const errorMiddleware = (err, req, res, next) => {
 
   // Log error for debugging (you might want to use a proper logger like winston)
   console.error(`[Error] ${req.method} ${req.url} - ${statusCode} - ${message}`);
-  
-  if (process.env.NODE_ENV !== 'production' && err.stack) {
-    // console.error(err.stack);
+
+  if (err.stack) {
+    console.error(err.stack);
   }
 
   res.status(statusCode).json({
