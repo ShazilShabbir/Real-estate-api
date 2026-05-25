@@ -38,12 +38,13 @@ const createUploadSignature = ({ folder = DEFAULT_PROPERTY_FOLDER, resourceType 
   const uploadTimestamp = Number(timestamp) || Math.floor(Date.now() / 1000);
   const paramsToSign = {
     folder,
-    resource_type: normalizedResourceType,
     timestamp: uploadTimestamp,
   };
 
   return {
-    ...paramsToSign,
+    folder,
+    timestamp: uploadTimestamp,
+    resourceType: normalizedResourceType,
     signature: cloudinary.utils.api_sign_request(
       paramsToSign,
       process.env.CLOUDINARY_API_SECRET,
