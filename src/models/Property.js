@@ -21,6 +21,25 @@ const addressSchema = new Schema(
 	{ _id: false }
 );
 
+const locationSchema = new Schema(
+	{
+		type: {
+			type: String,
+			enum: ["Point"],
+		},
+		coordinates: {
+			type: [Number],
+			validate: {
+				validator(value) {
+					return !value || (Array.isArray(value) && value.length === 2 && value.every((item) => Number.isFinite(item)));
+				},
+				message: "Location coordinates must contain [lng, lat]",
+			},
+		},
+	},
+	{ _id: false }
+);
+
 const propertySchema = new Schema(
 	{
 		title: { type: String, required: true, trim: true },
@@ -39,12 +58,8 @@ const propertySchema = new Schema(
 		address: addressSchema,
 		// GeoJSON point: [lng, lat]
 		location: {
-			type: {
-				type: String,
-				enum: ["Point"],
-				default: "Point",
-			},
-			coordinates: { type: [Number] },
+			type: locationSchema,
+			default: undefined,
 		},
 		images: [imageSchema],
 		videos: [imageSchema],
@@ -61,6 +76,16 @@ const propertySchema = new Schema(
 	},
 	{ timestamps: true }
 );
+
+propertySchema.pre("validate", function (next) {
+	const coords = this.location?.coordinates;
+	if (!Array.isArray(coords) || coords.length !== 2 || coords.some((item) => !Number.isFinite(item))) {
+		this.location = undefined;
+	} else if (!this.location?.type) {
+		this.location = { type: "Point", coordinates: coords };
+	}
+	next();
+});
 
 // Text index for quick searching
 propertySchema.index({ title: "text", description: "text", "address.city": "text", "address.state": "text" });

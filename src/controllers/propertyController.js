@@ -26,6 +26,20 @@ const parseStructuredField = (value, fallback) => {
   return value;
 };
 
+const normalizeLocation = (lngValue, latValue) => {
+  const parsedLng = Number.parseFloat(lngValue);
+  const parsedLat = Number.parseFloat(latValue);
+
+  if (!Number.isFinite(parsedLng) || !Number.isFinite(parsedLat)) {
+    return undefined;
+  }
+
+  return {
+    type: "Point",
+    coordinates: [parsedLng, parsedLat],
+  };
+};
+
 const normalizeMediaArray = (value) => {
   const parsed = parseStructuredField(value, []);
   if (!Array.isArray(parsed)) return [];
@@ -166,9 +180,7 @@ const createProperty = asyncHandler(async (req, res) => {
     throw new ApiError(500, "Failed to upload images to Cloudinary. Please check the logs.");
   }
 
-  const parsedLng = parseFloat(lng);
-  const parsedLat = parseFloat(lat);
-  const location = !isNaN(parsedLng) && !isNaN(parsedLat) ? { type: "Point", coordinates: [parsedLng, parsedLat] } : undefined;
+  const location = normalizeLocation(lng, lat);
 
   const isFeaturedVal = isFeatured === "true" || isFeatured === true;
 
@@ -183,7 +195,7 @@ const createProperty = asyncHandler(async (req, res) => {
     propertyType: propertyType || "house",
     status: status || "available",
     address: parsedAddress,
-    location,
+    ...(location ? { location } : {}),
     images,
     videos,
     amenities: amenities ? (typeof amenities === "string" ? amenities.split(",").map((a) => a.trim()).filter(Boolean) : amenities) : [],
@@ -354,11 +366,12 @@ const updateProperty = asyncHandler(async (req, res) => {
   }
 
   // handle location if provided
-  if (updates.lat && updates.lng) {
-    const lng = parseFloat(updates.lng);
-    const lat = parseFloat(updates.lat);
-    if (!isNaN(lng) && !isNaN(lat)) {
-      updates.location = { type: "Point", coordinates: [lng, lat] };
+  if (Object.prototype.hasOwnProperty.call(updates, "lat") || Object.prototype.hasOwnProperty.call(updates, "lng")) {
+    const location = normalizeLocation(updates.lng, updates.lat);
+    if (location) {
+      updates.location = location;
+    } else {
+      updates.location = undefined;
     }
   }
 
